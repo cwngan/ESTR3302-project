@@ -97,10 +97,10 @@ def cosine_coefficient(data):
 
 
 if __name__ == "__main__":
-    clean_trainging_set = remove_test_set(sample_user_ratings, sample_test_set)
-    baseline = baseline_prediction(clean_trainging_set, lmda=0)
+    clean_training_set = remove_test_set(sample_user_ratings, sample_test_set)
+    baseline = baseline_prediction(clean_training_set, lmda=0)
     print(baseline)
-    error = clean_trainging_set - baseline
+    error = clean_training_set - baseline
     print(error)
     cco = cosine_coefficient(error)
     print(cco)
