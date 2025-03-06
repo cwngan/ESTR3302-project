@@ -41,7 +41,7 @@ def remove_test_set(training_set, test_set):
     return np.array(res, dtype=float)
 
 
-def baseline_prediction(training_set, lmda=0):
+def find_baseline_prediction(training_set, lmda=0):
     """
     Perform baseline prediction with given training set.
     """
@@ -73,7 +73,7 @@ def baseline_prediction(training_set, lmda=0):
     return output
 
 
-def cosine_coefficient(data):
+def find_cosine_coefficients(data):
     """
     Calculate the cosine coefficient of every pair of columns in data.
     """
@@ -82,9 +82,9 @@ def cosine_coefficient(data):
     e2 = np.copy(data)
     for i in range(m):
         for j in range(m):
-            # if i == j:
-            #     D[i][j] = np.nan
-            #     continue
+            if i == j:
+                D[i][j] = 0
+                continue
             ri = e2[:, [i]]
             rj = e2[:, [j]]
             ri[np.isnan(rj)] = 0
@@ -96,11 +96,40 @@ def cosine_coefficient(data):
     return D
 
 
+def find_improved_prediction(training_set, baseline_prediction, D, error_matrix):
+    """
+    Calculate the improved prediction of based on the baseline prediction,
+    cosine coefficients, and error matrix.
+    """
+    n = len(training_set)
+    m = len(training_set[0])
+    D_neighbors = np.argpartition(np.abs(D), m - 2)[:, m - 2:]
+    L = np.zeros((n, m,))
+    for u in range(n):
+        for i in range(m):
+            d = D_neighbors[i]
+            d_sum = 0
+            if not np.isnan(training_set[u][d[0]]):
+                d_sum += np.abs(D[i][d[0]])
+            if not np.isnan(training_set[u][d[1]]):
+                d_sum += np.abs(D[i][d[1]])
+            if d_sum == 0:
+                continue
+            if not np.isnan(training_set[u][d[0]]):
+                L[u][i] += (D[i][d[0]] / d_sum) * error_matrix[u][d[0]]
+            if not np.isnan(training_set[u][d[1]]):
+                L[u][i] += (D[i][d[1]] / d_sum) * error_matrix[u][d[1]]
+    return np.clip(baseline_prediction + L, 1, 5)
+
+
 if __name__ == "__main__":
     clean_training_set = remove_test_set(sample_user_ratings, sample_test_set)
-    baseline = baseline_prediction(clean_training_set, lmda=0)
+    baseline = find_baseline_prediction(clean_training_set, lmda=0)
     print(baseline)
     error = clean_training_set - baseline
     print(error)
-    cco = cosine_coefficient(error)
-    print(cco)
+    cosine_coefficients = find_cosine_coefficients(error)
+    print(cosine_coefficients)
+    improved = find_improved_prediction(clean_training_set, baseline,
+                                        cosine_coefficients, error)
+    print(improved)
