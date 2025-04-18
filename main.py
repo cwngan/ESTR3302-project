@@ -1,21 +1,42 @@
 """Module for data predictions."""
+
 import numpy as np
 
 sample_user_ratings = [
-    [5, 4, 4, None, 5],
-    [None, 3, 5, 3, 4],
-    [5, 2, None, 2, 3],
-    [None, 2, 3, 1, 2],
-    [4, None, 5, 4, 5],
-    [5, 3, None, 3, 5],
-    [3, 2, 3, 2, None],
-    [5, 3, 4, None, 5],
-    [4, 2, 5, 4, None],
-    [5, None, 5, 3, 4]
+    [5, 4, 5, 3, 3],
+    [3, 2, 2, 4, 1],
+    [3, 4, 3, 5, 4],
+    [5, 1, 4, 2, 4],
+    [2, 3, 4, 1, 1],
+    [2, 3, 4, 2, 5],
 ]
 
-sample_test_set = [(0, 4), (1, 3), (2, 3), (3, 1), (4, 2),
-                   (5, 0), (6, 1), (7, 1), (8, 0), (9, 0)]
+sample_test_set = [
+    (0, 0),
+    (0, 3),
+    (1, 1),
+    (1, 4),
+    (2, 0),
+    (2, 4),
+    (3, 2),
+    (4, 1),
+    (4, 3),
+    (5, 0),
+]
+# sample_user_ratings = [
+#     [5, 4, 4, None, 5],
+#     [None, 3, 5, 3, 4],
+#     [5, 2, None, 2, 3],
+#     [None, 2, 3, 1, 2],
+#     [4, None, 5, 4, 5],
+#     [5, 3, None, 3, 5],
+#     [3, 2, 3, 2, None],
+#     [5, 3, 4, None, 5],
+#     [4, 2, 5, 4, None],
+#     [5, None, 5, 3, 4]
+# ]
+# sample_test_set = [(0, 4), (1, 3), (2, 3), (3, 1), (4, 2),
+#                    (5, 0), (6, 1), (7, 1), (8, 0), (9, 0)]
 predictions = []
 
 
@@ -41,6 +62,32 @@ def remove_test_set(training_set, test_set):
     return np.array(res, dtype=float)
 
 
+def get_test_set_matrix(training_set, test_set):
+    res = np.full(
+        (
+            len(training_set),
+            len(training_set[0]),
+        ),
+        np.nan,
+        dtype=float,
+    )
+    for test in test_set:
+        res[test[0]][test[1]] = training_set[test[0]][test[1]]
+    return res
+
+
+def find_MSE(prediction: np.ndarray[any], known: np.ndarray[2]):
+    mse = 0
+    ts = 0
+    for i in range(len(prediction)):
+        for j in range(len(prediction[i])):
+            if np.isnan(prediction[i][j]) or np.isnan(known[i][j]):
+                continue
+            mse += (prediction[i][j] - known[i][j]) ** 2
+            ts += 1
+    return mse / ts
+
+
 def find_baseline_prediction(training_set, lmda=0):
     """
     Perform baseline prediction with given training set.
@@ -64,11 +111,12 @@ def find_baseline_prediction(training_set, lmda=0):
     c = np.atleast_2d(c).transpose()
     AT = A.transpose()
     b = np.linalg.solve(AT @ A + lmda * np.identity(AT.shape[0]), AT @ c)
+    print(b)
+    print("\\\\\n".join(["{:.5f}".format(a) for a in b.flatten()]))
     output = np.zeros(shape=(len(training_set), len(training_set[0])))
     for i in range(len(training_set)):
         for j in range(len(training_set[0])):
-            output[i][j] = (average_rating + b[i][0] +
-                            b[len(training_set) + j][0])
+            output[i][j] = average_rating + b[i][0] + b[len(training_set) + j][0]
     np.clip(output, 1, 5, out=output)
     return output
 
@@ -77,22 +125,27 @@ def find_cosine_coefficients(data):
     """
     Calculate the cosine coefficient of every pair of columns in data.
     """
+    print(data)
     m = len(data[0])
-    D = np.empty((m, m,))
-    e2 = np.copy(data)
+    D = np.empty(
+        (
+            m,
+            m,
+        )
+    )
     for i in range(m):
         for j in range(m):
             if i == j:
                 D[i][j] = 0
                 continue
-            ri = e2[:, [i]]
-            rj = e2[:, [j]]
+            ri = data[:, [i]]
+            rj = data[:, [j]]
             ri[np.isnan(rj)] = 0
             rj[np.isnan(ri)] = 0
             ri[np.isnan(ri)] = 0
             rj[np.isnan(rj)] = 0
             D[i][j] = (ri.transpose() @ rj).sum()
-            D[i][j] /= (np.linalg.norm(ri) * np.linalg.norm(rj))
+            D[i][j] /= np.linalg.norm(ri) * np.linalg.norm(rj)
     return D
 
 
@@ -103,33 +156,60 @@ def find_improved_prediction(training_set, baseline_prediction, D, error_matrix)
     """
     n = len(training_set)
     m = len(training_set[0])
-    D_neighbors = np.argpartition(np.abs(D), m - 2)[:, m - 2:]
-    L = np.zeros((n, m,))
+    # D_neighbors = np.argpartition(np.abs(D), m - 2)[:, m - 2:]
+    D_neighbors = np.argsort(np.abs(D), axis=1)
+    # D_neighbors = np.argpartition(np.abs(D), m - 1)[:, m - 1:]
+    L = np.zeros(
+        (
+            n,
+            m,
+        )
+    )
     for u in range(n):
         for i in range(m):
             d = D_neighbors[i]
             d_sum = 0
-            if not np.isnan(training_set[u][d[0]]):
-                d_sum += np.abs(D[i][d[0]])
-            if not np.isnan(training_set[u][d[1]]):
-                d_sum += np.abs(D[i][d[1]])
+            k = m - 1
+            while np.isnan(training_set[u][d[k]]):
+                k -= 1
+            d_sum += np.abs(D[i][d[k]])
             if d_sum == 0:
                 continue
-            if not np.isnan(training_set[u][d[0]]):
-                L[u][i] += (D[i][d[0]] / d_sum) * error_matrix[u][d[0]]
-            if not np.isnan(training_set[u][d[1]]):
-                L[u][i] += (D[i][d[1]] / d_sum) * error_matrix[u][d[1]]
+            L[u][i] += (D[i][d[k]] / d_sum) * error_matrix[u][d[k]]
     return np.clip(baseline_prediction + L, 1, 5)
 
 
 if __name__ == "__main__":
     clean_training_set = remove_test_set(sample_user_ratings, sample_test_set)
-    baseline = find_baseline_prediction(clean_training_set, lmda=0)
+    clean_test_set_matrix = get_test_set_matrix(sample_user_ratings, sample_test_set)
+    baseline = find_baseline_prediction(clean_training_set, lmda=0.25)
     print(baseline)
+    # print(remove_test_set(baseline, sample_test_set))
+    print(find_MSE(baseline, clean_training_set) ** 0.5)
+    print(clean_test_set_matrix)
+    print(find_MSE(baseline, clean_test_set_matrix) ** 0.5)
+    baseline = np.array(
+        [
+            [np.nan, 2.7, 3.3, np.nan, 4.5],
+            [4.1, np.nan, 3.5, 4.9, np.nan],
+            [np.nan, 3.8, 2.5, 4.2, np.nan],
+            [2.8, 3.1, np.nan, 2.6, 4.8],
+            [3.3, np.nan, 3.7, np.nan, 2.4],
+            [np.nan, 3.9, 4.0, 1.5, 3.9],
+        ]
+    )
     error = clean_training_set - baseline
     print(error)
-    cosine_coefficients = find_cosine_coefficients(error)
+    cosine_coefficients = find_cosine_coefficients(error.transpose())
+    np.set_printoptions(formatter={"float": lambda x: "{0:0.4f}".format(x)})
     print(cosine_coefficients)
-    improved = find_improved_prediction(clean_training_set, baseline,
-                                        cosine_coefficients, error)
-    print(improved)
+    improved = find_improved_prediction(
+        clean_training_set.transpose(),
+        baseline.transpose(),
+        cosine_coefficients,
+        error.transpose(),
+    )
+    print(improved.transpose())
+    # print(find_MSE(improved, clean_training_set) ** 0.5)
+    # print(clean_test_set_matrix)
+    # print(find_MSE(improved, clean_test_set_matrix) ** 0.5)
