@@ -2,41 +2,51 @@
 
 import numpy as np
 
-sample_user_ratings = [
-    [5, 4, 5, 3, 3],
-    [3, 2, 2, 4, 1],
-    [3, 4, 3, 5, 4],
-    [5, 1, 4, 2, 4],
-    [2, 3, 4, 1, 1],
-    [2, 3, 4, 2, 5],
-]
-
-sample_test_set = [
-    (0, 0),
-    (0, 3),
-    (1, 1),
-    (1, 4),
-    (2, 0),
-    (2, 4),
-    (3, 2),
-    (4, 1),
-    (4, 3),
-    (5, 0),
-]
 # sample_user_ratings = [
-#     [5, 4, 4, None, 5],
-#     [None, 3, 5, 3, 4],
-#     [5, 2, None, 2, 3],
-#     [None, 2, 3, 1, 2],
-#     [4, None, 5, 4, 5],
-#     [5, 3, None, 3, 5],
-#     [3, 2, 3, 2, None],
-#     [5, 3, 4, None, 5],
-#     [4, 2, 5, 4, None],
-#     [5, None, 5, 3, 4]
+#     [5, 4, 5, 3, 3],
+#     [3, 2, 2, 4, 1],
+#     [3, 4, 3, 5, 4],
+#     [5, 1, 4, 2, 4],
+#     [2, 3, 4, 1, 1],
+#     [2, 3, 4, 2, 5],
 # ]
-# sample_test_set = [(0, 4), (1, 3), (2, 3), (3, 1), (4, 2),
-#                    (5, 0), (6, 1), (7, 1), (8, 0), (9, 0)]
+
+# sample_test_set = [
+#     (0, 0),
+#     (0, 3),
+#     (1, 1),
+#     (1, 4),
+#     (2, 0),
+#     (2, 4),
+#     (3, 2),
+#     (4, 1),
+#     (4, 3),
+#     (5, 0),
+# ]
+sample_user_ratings = [
+    [5, 4, 4, None, 5],
+    [None, 3, 5, 3, 4],
+    [5, 2, None, 2, 3],
+    [None, 2, 3, 1, 2],
+    [4, None, 5, 4, 5],
+    [5, 3, None, 3, 5],
+    [3, 2, 3, 2, None],
+    [5, 3, 4, None, 5],
+    [4, 2, 5, 4, None],
+    [5, None, 5, 3, 4],
+]
+sample_test_set = [
+    (0, 4),
+    (1, 3),
+    (2, 3),
+    (3, 1),
+    (4, 2),
+    (5, 0),
+    (6, 1),
+    (7, 1),
+    (8, 0),
+    (9, 0),
+]
 predictions = []
 
 
@@ -111,8 +121,6 @@ def find_baseline_prediction(training_set, lmda=0):
     c = np.atleast_2d(c).transpose()
     AT = A.transpose()
     b = np.linalg.solve(AT @ A + lmda * np.identity(AT.shape[0]), AT @ c)
-    print(b)
-    print("\\\\\n".join(["{:.5f}".format(a) for a in b.flatten()]))
     output = np.zeros(shape=(len(training_set), len(training_set[0])))
     for i in range(len(training_set)):
         for j in range(len(training_set[0])):
@@ -188,16 +196,6 @@ if __name__ == "__main__":
     print(find_MSE(baseline, clean_training_set) ** 0.5)
     print(clean_test_set_matrix)
     print(find_MSE(baseline, clean_test_set_matrix) ** 0.5)
-    baseline = np.array(
-        [
-            [np.nan, 2.7, 3.3, np.nan, 4.5],
-            [4.1, np.nan, 3.5, 4.9, np.nan],
-            [np.nan, 3.8, 2.5, 4.2, np.nan],
-            [2.8, 3.1, np.nan, 2.6, 4.8],
-            [3.3, np.nan, 3.7, np.nan, 2.4],
-            [np.nan, 3.9, 4.0, 1.5, 3.9],
-        ]
-    )
     error = clean_training_set - baseline
     print(error)
     cosine_coefficients = find_cosine_coefficients(error.transpose())
