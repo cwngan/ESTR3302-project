@@ -46,14 +46,9 @@ def mean_square_error(prediction: np.ndarray, known: np.ndarray):
     """
     Calculate the mean square error between prediction and known values.
     """
-    mse = 0
-    ts = 0
-    for i, row in enumerate(prediction):
-        for j, cell in enumerate(row):
-            if np.ma.is_masked(cell) or np.ma.is_masked(known[i][j]):
-                continue
-            mse += (cell - known[i][j]) ** 2
-            ts += 1
+    total_mask = ~(np.ma.getmaskarray(prediction) | np.ma.getmaskarray(known))
+    ts = np.count_nonzero(total_mask)
+    mse = np.ma.sum((prediction - known) ** 2)
     return mse / ts
 
 
