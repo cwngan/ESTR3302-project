@@ -13,7 +13,6 @@ class LatentFactorPredictor(Predictor):
     p: np.ndarray
     q: np.ndarray
     lmda: float
-    prediction: np.ndarray = None
 
     def __init__(
         self,
@@ -39,6 +38,22 @@ class LatentFactorPredictor(Predictor):
         self.q = q if q is not None else np.random.rand(k, i) * 10.0 - 5
         self.lmda = lmda
         self.train()
+
+    @override
+    def predict(self, entries):
+        res = np.zeros(len(entries))
+        for idx, entry in enumerate(entries):
+            u, i = entry
+            res[idx] = self.p[:, [u]].T @ self.q[:, [i]]
+        return res
+
+    @override
+    def predict_all(self):
+        prediction = np.zeros(shape=self.training_data.shape, dtype=np.float64)
+        for u in range(self.training_data.shape[0]):
+            for i in range(self.training_data.shape[1]):
+                prediction[u, i] = self.predict([(u, i)])
+        return prediction
 
     @override
     def train(self, iterations: int = 20):
@@ -77,21 +92,3 @@ class LatentFactorPredictor(Predictor):
                     self.training_data[u, i] * self.q[:, [i]] for i in i_u
                 )
                 self.p[:, [u]] = np.linalg.solve(left_sum, right_sum)
-
-    @override
-    def predict(self, entries):
-        res = np.zeros(len(entries))
-        for idx, entry in enumerate(entries):
-            u, i = entry
-            res[idx] = self.p[:, [u]].T @ self.q[:, [i]]
-        return res
-
-    @override
-    def predict_all(self):
-        if self.prediction is not None:
-            return self.prediction
-        self.prediction = np.zeros(shape=self.training_data.shape, dtype=np.float64)
-        for u in range(self.training_data.shape[0]):
-            for i in range(self.training_data.shape[1]):
-                self.prediction[u, i] = self.predict([(u, i)])
-        return self.prediction

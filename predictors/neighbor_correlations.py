@@ -19,10 +19,10 @@ class NeighborCorrelationsPredictor(Predictor):
 
     lmda: float
     baseline: Predictor
-    error: np.ndarray
-    cosine_coefficients: np.ndarray
+    error: np.ndarray = None
+    cosine_coefficients: np.ndarray = None
     correlation: Correlation
-    predictions: np.ndarray = None
+    neighbor_table: np.ndarray = None
 
     def __init__(
         self,
@@ -39,11 +39,7 @@ class NeighborCorrelationsPredictor(Predictor):
             self.training_data = baseline.training_data
             self.lmda = baseline.lmda
             self.baseline = baseline
-        self.error = (
-            np.ma.masked_less(self.training_data, 0) - self.baseline.predict_all()
-        )
         self.correlation = correlation
-        self.cosine_coefficients = self._find_cosine_coefficients(self.error)
 
     def _find_cosine_coefficients(self, data: np.ndarray):
         """
@@ -70,31 +66,40 @@ class NeighborCorrelationsPredictor(Predictor):
 
     @override
     def predict(self, entries):
-        if self.predictions is None:
+        if (
+            self.neighbor_table is None
+            or self.error is None
+            or self.cosine_coefficients is None
+        ):
             raise RuntimeError("Predictor has not been trained yet")
-        return [self.predictions[entry] for entry in entries]
+        result = self.baseline.predict(entries)
+        error = self.error
+        if self.correlation == Correlation.USER:
+            error = error.T
+        for idx, entry in enumerate(entries):
+            u, i = entry
+            if self.correlation == Correlation.USER:
+                u, i = i, u
+            d_sum = sum(
+                abs(self.cosine_coefficients[i][j]) for j in self.neighbor_table[u][i]
+            )
+            for j in self.neighbor_table[u][i]:
+                result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
+        return np.clip(result, min=1, max=5)
 
     @override
     def predict_all(self):
-        if self.predictions is None:
+        if (
+            self.neighbor_table is None
+            or self.error is None
+            or self.cosine_coefficients is None
+        ):
             raise RuntimeError("Predictor has not been trained yet")
-        return self.predictions
-
-    @override
-    def train(self, get_neighbors: Any = most_similar):
         n, m = self.training_data.shape
         error = self.error
         if self.correlation == Correlation.USER:
             n, m = m, n
             error = error.T
-        L = get_neighbors(
-            training_data=(
-                self.training_data
-                if self.correlation == Correlation.ITEM
-                else self.training_data.T
-            ),
-            cosine_coefficients=self.cosine_coefficients,
-        )
         result = (
             self.baseline.predict_all().copy()
             if self.correlation == Correlation.ITEM
@@ -102,9 +107,28 @@ class NeighborCorrelationsPredictor(Predictor):
         )
         for u in range(n):
             for i in range(m):
-                d_sum = sum(abs(self.cosine_coefficients[i][j]) for j in L[u][i])
-                for j in L[u][i]:
+                d_sum = sum(
+                    abs(self.cosine_coefficients[i][j])
+                    for j in self.neighbor_table[u][i]
+                )
+                for j in self.neighbor_table[u][i]:
                     result[u][i] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
-        self.predictions = np.clip(result, min=1, max=5)
+        predictions = np.clip(result, min=1, max=5)
         if self.correlation == Correlation.USER:
-            self.predictions = self.predictions.T
+            predictions = predictions.T
+        return predictions
+
+    @override
+    def train(self, get_neighbors: Any = most_similar):
+        self.error = (
+            np.ma.masked_less(self.training_data, 0) - self.baseline.predict_all()
+        )
+        self.cosine_coefficients = self._find_cosine_coefficients(self.error)
+        self.neighbor_table = get_neighbors(
+            training_data=(
+                self.training_data
+                if self.correlation == Correlation.ITEM
+                else self.training_data.T
+            ),
+            cosine_coefficients=self.cosine_coefficients,
+        )
