@@ -69,44 +69,19 @@ class NeighborCorrelationsPredictor(Predictor):
         return D
 
     @override
-    def predict(self, entries, get_neighbors: Any = most_similar):
-        if self.predictions is not None:
-            return self.predictions[entries[0]][entries[1]]
-        result = self.baseline.predict(entries)
-        error = self.error
-        if self.correlation == Correlation.USER:
-            error = error.T
-        for idx, entry in enumerate(entries):
-            neighbors = get_neighbors(
-                training_data=(
-                    self.training_data
-                    if self.correlation == Correlation.ITEM
-                    else self.training_data.T
-                ),
-                cosine_coefficients=self.cosine_coefficients,
-                one=True,
-                entry=(
-                    entry
-                    if self.correlation == Correlation.ITEM
-                    else tuple(reversed(entry))
-                ),
-            )
-            u, i = entry
-            if self.correlation == Correlation.USER:
-                u, i = i, u
-            d_sum = sum(abs(self.cosine_coefficients[i][j]) for j in neighbors)
-            for j in neighbors:
-                result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
-        return np.clip(result, min=1, max=5)
+    def predict(self, entries):
+        if self.predictions is None:
+            raise RuntimeError("Predictor has not been trained yet")
+        return [self.predictions[entry] for entry in entries]
 
     @override
-    def predict_all(self, get_neighbors: Any = most_similar):
-        """
-        Calculate the improved prediction of based on the baseline prediction,
-        cosine coefficients, and error matrix.
-        """
-        if self.predictions is not None:
-            return self.predictions
+    def predict_all(self):
+        if self.predictions is None:
+            raise RuntimeError("Predictor has not been trained yet")
+        return self.predictions
+
+    @override
+    def train(self, get_neighbors: Any = most_similar):
         n, m = self.training_data.shape
         error = self.error
         if self.correlation == Correlation.USER:
@@ -133,4 +108,3 @@ class NeighborCorrelationsPredictor(Predictor):
         self.predictions = np.clip(result, min=1, max=5)
         if self.correlation == Correlation.USER:
             self.predictions = self.predictions.T
-        return self.predictions

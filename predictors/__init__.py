@@ -1,5 +1,5 @@
-import numpy as np
 from abc import ABC, abstractmethod
+import numpy as np
 
 
 class Predictor(ABC):
@@ -16,8 +16,16 @@ class Predictor(ABC):
         """
         raise NotImplementedError("Subclasses should implement this method.")
 
+    @abstractmethod
     def predict_all(self) -> np.ndarray:
         """
         Predict the rating for all users and items.
+        """
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abstractmethod
+    def train(self):
+        """
+        Train the predictor.
         """
         raise NotImplementedError("Subclasses should implement this method.")

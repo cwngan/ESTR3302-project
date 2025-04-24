@@ -40,8 +40,9 @@ class LatentFactorPredictor(Predictor):
         self.lmda = lmda
         self.train()
 
+    @override
     def train(self, iterations: int = 20):
-        for it in range(iterations):
+        for _ in range(iterations):
             for i in range(self.training_data.shape[1]):
                 u_i = list(
                     filter(
