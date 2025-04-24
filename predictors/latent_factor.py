@@ -1,6 +1,6 @@
 from functools import partial
-import numpy as np
 from typing import override
+import numpy as np
 from predictors import Predictor
 
 
