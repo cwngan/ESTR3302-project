@@ -1,6 +1,7 @@
 from functools import partial
 from typing import override
 import numpy as np
+from tqdm import tqdm
 from predictors import Predictor
 
 
@@ -57,6 +58,51 @@ class LatentFactorPredictor(Predictor):
 
     @override
     def train(self, iterations: int = 20):
+        """
+        Optimized by o3-mini from `old_train`.
+        """
+        R = self.training_data
+        n, m = R.shape
+        k = self.k
+        lmda = self.lmda
+
+        # 1) precompute for each item i the list of users who rated it
+        #    and for each user u the list of items they rated
+        mask = np.ma.getmaskarray(R)
+        users_by_item = [np.nonzero(~mask[:, i])[0] for i in range(m)]
+        items_by_user = [np.nonzero(~mask[u, :])[0] for u in range(n)]
+
+        # 2) cache I_k
+        I_k = np.eye(k, dtype=np.float64)
+
+        # 3) ALS loop
+        for _ in tqdm(range(iterations)):
+            # update Q (item factors)
+            for i, users in enumerate(tqdm(users_by_item, leave=False)):
+                if users.size == 0:
+                    continue
+                # P_u: k×|U_i|
+                P_u = self.p[:, users]
+                # A = P_u P_u^T + λ I
+                A = P_u @ P_u.T + lmda * I_k
+                # b = sum_{u∈U_i} r_{u,i} * P_u[:,u]
+                #    = P_u @ r_vec  where r_vec has shape (|U_i|,)
+                r_vec = R[users, i].astype(np.float64)
+                b = P_u @ r_vec
+                # solve A q_i = b
+                self.q[:, i] = np.linalg.solve(A, b)
+
+            # update P (user factors)
+            for u, items in enumerate(tqdm(items_by_user, leave=False)):
+                if items.size == 0:
+                    continue
+                Q_i = self.q[:, items]
+                A = Q_i @ Q_i.T + lmda * I_k
+                r_vec = R[u, items].astype(np.float64)
+                b = Q_i @ r_vec
+                self.p[:, u] = np.linalg.solve(A, b)
+
+    def old_train(self, iterations: int = 20):
         for _ in range(iterations):
             for i in range(self.training_data.shape[1]):
                 u_i = list(
