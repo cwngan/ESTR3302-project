@@ -64,7 +64,7 @@ class LeastSquaresPredictor(Predictor):
     def predict_all(self):
         if self.prediction is not None:
             return self.prediction
-        prediction = np.zeros(shape=self.training_data.shape, dtype=float)
+        prediction = np.zeros(shape=self.training_data.shape, dtype=np.float64)
         for i in range(np.size(self.training_data, 0)):
             for j in range(np.size(self.training_data, 1)):
                 prediction[i][j] = (

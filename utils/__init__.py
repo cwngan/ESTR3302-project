@@ -3,7 +3,7 @@ import numpy as np
 
 
 def mask_unknown_values(training_data: Any):
-    res = np.array(training_data, dtype=float)
+    res = np.array(training_data, dtype=np.float64)
     mask = np.less(training_data, 0)
     return np.ma.masked_array(res, np.ma.make_mask(mask))
 
@@ -38,7 +38,7 @@ def get_test_set_matrix(training_data: Any, test_set: list[tuple[int]]):
     """
     Returns a matrix representing the data of the test set.
     """
-    res = np.array(training_data, dtype=float)
+    res = np.array(training_data, dtype=np.float64)
     return np.ma.masked_array(res, ~get_test_set_mask(test_set, res.shape))
 
 

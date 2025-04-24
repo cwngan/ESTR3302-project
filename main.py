@@ -69,7 +69,7 @@ def remove_test_set(training_set, test_set):
             res[-1].append(col)
     for test in test_set:
         res[test[0]][test[1]] = None
-    return np.array(res, dtype=float)
+    return np.array(res, dtype=np.float64)
 
 
 def get_test_set_matrix(training_set, test_set):
@@ -79,7 +79,7 @@ def get_test_set_matrix(training_set, test_set):
             len(training_set[0]),
         ),
         np.nan,
-        dtype=float,
+        dtype=np.float64,
     )
     for test in test_set:
         res[test[0]][test[1]] = training_set[test[0]][test[1]]
