@@ -118,8 +118,8 @@ def find_baseline_prediction(training_set, lmda=0):
             c.append(col - average_rating)
 
     A = np.array(A)
-    c = np.atleast_2d(c).transpose()
-    AT = A.transpose()
+    c = np.atleast_2d(c).T
+    AT = A.T
     b = np.linalg.solve(AT @ A + lmda * np.identity(AT.shape[0]), AT @ c)
     output = np.zeros(shape=(len(training_set), len(training_set[0])))
     for i in range(len(training_set)):
@@ -152,7 +152,7 @@ def find_cosine_coefficients(data):
             rj[np.isnan(ri)] = 0
             ri[np.isnan(ri)] = 0
             rj[np.isnan(rj)] = 0
-            D[i][j] = (ri.transpose() @ rj).sum()
+            D[i][j] = (ri.T @ rj).sum()
             D[i][j] /= np.linalg.norm(ri) * np.linalg.norm(rj)
     return D
 
@@ -198,16 +198,16 @@ if __name__ == "__main__":
     print(find_MSE(baseline, clean_test_set_matrix) ** 0.5)
     error = clean_training_set - baseline
     print(error)
-    cosine_coefficients = find_cosine_coefficients(error.transpose())
+    cosine_coefficients = find_cosine_coefficients(error.T)
     np.set_printoptions(formatter={"float": lambda x: "{0:0.4f}".format(x)})
     print(cosine_coefficients)
     improved = find_improved_prediction(
-        clean_training_set.transpose(),
-        baseline.transpose(),
+        clean_training_set.T,
+        baseline.T,
         cosine_coefficients,
-        error.transpose(),
+        error.T,
     )
-    print(improved.transpose())
+    print(improved.T)
     # print(find_MSE(improved, clean_training_set) ** 0.5)
     # print(clean_test_set_matrix)
     # print(find_MSE(improved, clean_test_set_matrix) ** 0.5)

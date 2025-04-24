@@ -46,7 +46,7 @@ class NeighborCorrelationsPredictor(Predictor):
         self.cosine_coefficients = (
             self._find_cosine_coefficients(self.error)
             if self.correlation == Correlation.ITEM
-            else self._find_cosine_coefficients(self.error.transpose())
+            else self._find_cosine_coefficients(self.error.T)
         )
 
     def _find_cosine_coefficients(self, data: np.ndarray):
@@ -66,7 +66,7 @@ class NeighborCorrelationsPredictor(Predictor):
                 rj[np.ma.getmask(ri)] = 0
                 ri[np.ma.getmask(ri)] = 0
                 rj[np.ma.getmask(rj)] = 0
-                D[i][j] = (ri.transpose() @ rj).sum()
+                D[i][j] = (ri.T @ rj).sum()
                 D[i][j] /= np.linalg.norm(ri) * np.linalg.norm(rj)
         return D
 

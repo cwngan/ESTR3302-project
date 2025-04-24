@@ -39,8 +39,8 @@ class LeastSquaresPredictor(Predictor):
                 c.append(col - self.average_rating)
 
         a = np.array(a)
-        c = np.atleast_2d(c).transpose()
-        a_transpose = a.transpose()
+        c = np.atleast_2d(c).T
+        a_transpose = a.T
         self.b = np.linalg.solve(
             a_transpose @ a + self.lmda * np.identity(a_transpose.shape[0]),
             a_transpose @ c,
