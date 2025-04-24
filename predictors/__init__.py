@@ -16,7 +16,7 @@ class Predictor(ABC):
         """
         raise NotImplementedError("Subclasses should implement this method.")
 
-    def predict_all(self) -> list[float]:
+    def predict_all(self) -> np.ndarray:
         """
         Predict the rating for all users and items.
         """
