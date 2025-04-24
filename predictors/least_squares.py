@@ -1,6 +1,8 @@
 from typing import override
 import numpy as np
-
+from scipy.sparse import diags, bmat
+from scipy.sparse.linalg import spsolve
+from scipy.sparse import csr_matrix
 from predictors import Predictor
 from utils import average
 
@@ -27,9 +29,7 @@ class LeastSquaresPredictor(Predictor):
         for idx, entry in enumerate(entries):
             i, j = entry
             output[idx] = (
-                self.average_rating
-                + self.b[i][0]
-                + self.b[len(self.training_data) + j][0]
+                self.average_rating + self.b[i] + self.b[len(self.training_data) + j]
             )
         return np.clip(output, 1, 5)
 
@@ -42,29 +42,62 @@ class LeastSquaresPredictor(Predictor):
             for j in range(np.size(self.training_data, 1)):
                 prediction[i][j] = (
                     self.average_rating
-                    + self.b[i][0]
-                    + self.b[len(self.training_data) + j][0]
+                    + self.b[i]
+                    + self.b[len(self.training_data) + j]
                 )
         return prediction.clip(min=1, max=5)
 
     @override
     def train(self):
-        a = []
-        c = []
+        """
+        Train the predictor using the training data using sparse matrices.
+
+        Optimized by o3-mini from `old_train`.
+        """
+        print("Constructing relevant matrices...", flush=True)
+        # number of ratings per user u and per item i
+        N_u = np.sum(~np.ma.getmask(self.training_data), axis=1)  # shape (n,)
+        N_i = np.sum(~np.ma.getmask(self.training_data), axis=0)  # shape (m,)
+
+        C = self.training_data - self.average_rating
+        uc = np.array(C.sum(axis=1))
+        ic = np.array(C.sum(axis=0))
+        rhs = np.concatenate([uc, ic])
+
+        U = diags(N_u + self.lmda)
+        I = diags(N_i + self.lmda)
+        # off‐diagonals: rating adjacency as sparse
+
+        mask = ~np.ma.getmask(self.training_data)
+        # build sparse mask matrix M of shape (n,m)
+        M = csr_matrix(mask.astype(np.float64))
+        AAT = bmat([[U, M], [M.T, I]])
+        print("Calculating user and item biases...", flush=True)
+        self.b = spsolve(AAT, rhs)
+        print("Training done.")
+
+    def old_train(self):
+        """
+        Train the predictor naively using the training data.
+        """
+        n, m = self.training_data.shape
+        a = np.zeros(shape=(n * m, n + m), dtype=np.float64)
+        c = np.zeros(shape=(n * m, 1), dtype=np.float64)
+
+        curr_col = 0
 
         for i, row in enumerate(self.training_data):
             for j, col in enumerate(row):
                 if np.ma.is_masked(col):
                     continue
-                tmp = [0] * (len(self.training_data) + len(row))
-                tmp[i] = 1
-                tmp[len(self.training_data) + j] = 1
-                a.append(tmp)
-                c.append(col - self.average_rating)
+                a[curr_col, i] = 1
+                a[curr_col, n + j] = 1
+                c[curr_col, 0] = col - self.average_rating
+                curr_col += 1
 
-        a = np.array(a)
-        c = np.atleast_2d(c).T
+        a = a[:curr_col, :]
         a_transpose = a.T
+        c = c[:curr_col, :]
         self.b = np.linalg.solve(
             a_transpose @ a + self.lmda * np.identity(a_transpose.shape[0]),
             a_transpose @ c,
