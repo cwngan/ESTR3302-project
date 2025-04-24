@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm import tqdm
 
 
 def most_similar(
@@ -21,7 +22,7 @@ def most_similar(
             k -= 1
         return [d[k]]
     L = [[[] for _ in range(m)] for __ in range(n)]
-    for u in range(n):
+    for u in tqdm(range(n)):
         for i in range(m):
             d = D_neighbors[i]
             k = m - 1
@@ -54,7 +55,7 @@ def two_most_similar(
             k -= 1
         return res
     L = [[[] for _ in range(m)] for __ in range(n)]
-    for u in range(n):
+    for u in tqdm(range(n)):
         for i in range(m):
             d = D_neighbors[i]
             k = m - 1
@@ -91,7 +92,7 @@ def two_most_similar_skip_masked(
             k -= 1
         return res
     L = [[[] for _ in range(m)] for __ in range(n)]
-    for u in range(n):
+    for u in tqdm(range(n)):
         for i in range(m):
             d = D_neighbors[i]
             k = m - 1

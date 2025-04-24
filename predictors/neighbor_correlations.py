@@ -158,10 +158,12 @@ class NeighborCorrelationsPredictor(Predictor):
 
     @override
     def train(self, get_neighbors: Any = most_similar):
+        print("Calculating cosine similarity coefficients...")
         self.error = (
             np.ma.masked_less(self.training_data, 0) - self.baseline.predict_all()
         )
         self.cosine_coefficients = self._find_cosine_coefficients(self.error)
+        print("Making neighbor table...")
         self.neighbor_table = get_neighbors(
             training_data=(
                 self.training_data
@@ -170,3 +172,4 @@ class NeighborCorrelationsPredictor(Predictor):
             ),
             cosine_coefficients=self.cosine_coefficients,
         )
+        print("Finish training.")

@@ -3,6 +3,7 @@ import numpy as np
 from scipy.sparse import diags, bmat
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import csr_matrix
+from tqdm import tqdm
 from predictors import Predictor
 from utils import average
 
@@ -26,25 +27,29 @@ class LeastSquaresPredictor(Predictor):
         if self.b is None:
             raise RuntimeError("Predictor not trained yet.")
         output = [0.0] * len(entries)
-        for idx, entry in enumerate(entries):
+        print("Predicting entries...")
+        for idx, entry in enumerate(tqdm(entries)):
             i, j = entry
             output[idx] = (
                 self.average_rating + self.b[i] + self.b[len(self.training_data) + j]
             )
+        print("Finish predicting entries.")
         return np.clip(output, 1, 5)
 
     @override
     def predict_all(self):
         if self.b is None:
             raise RuntimeError("Predictor not trained yet.")
+        print("Predicting all...")
         prediction = np.zeros(shape=self.training_data.shape, dtype=np.float64)
-        for i in range(np.size(self.training_data, 0)):
+        for i in tqdm(range(np.size(self.training_data, 0))):
             for j in range(np.size(self.training_data, 1)):
                 prediction[i][j] = (
                     self.average_rating
                     + self.b[i]
                     + self.b[len(self.training_data) + j]
                 )
+        print("Finish predicting all.")
         return prediction.clip(min=1, max=5)
 
     @override
