@@ -18,17 +18,18 @@ def most_similar(
         u, i = entry
         d = D_neighbors[i]
         k = m - 1
-        while np.ma.is_masked(training_data[u][d[k]]):
+        while k >= 0 and np.ma.is_masked(training_data[u][d[k]]):
             k -= 1
+        if k < 0:
+            return []
         return [d[k]]
-    L = [[[] for _ in range(m)] for __ in range(n)]
+    L = np.zeros((n, m), dtype=int)
     for u in tqdm(range(n)):
-        for i in range(m):
-            d = D_neighbors[i]
-            k = m - 1
-            while np.ma.is_masked(training_data[u][d[k]]):
-                k -= 1
-            L[u][i].append(d[k])
+        masked_d = np.ma.masked_array(
+            np.abs(cosine_coefficients),
+            np.tile(np.ma.getmaskarray(training_data[u]), (m, 1)),
+        )
+        L[u, :] = np.ma.argmax(masked_d, axis=1, fill_value=-999999)
     return L
 
 
@@ -56,13 +57,14 @@ def two_most_similar(
         return res
     L = [[[] for _ in range(m)] for __ in range(n)]
     for u in tqdm(range(n)):
-        for i in range(m):
-            d = D_neighbors[i]
-            k = m - 1
-            while k >= 0 and len(L[u][i]) < 2:
-                if not np.ma.is_masked(training_data[u][d[k]]):
-                    L[u][i].append(d[k])
-                k -= 1
+        masked_d = np.ma.masked_array(
+            np.abs(cosine_coefficients),
+            np.tile(np.ma.getmaskarray(training_data[u]), (m, 1)),
+        )
+        D_neighbors = np.argpartition(
+            np.ma.filled(np.ma.abs(masked_d), -999999), m - 2, axis=1
+        )
+        L[u] = D_neighbors[:, -2:]
     return L
 
 
