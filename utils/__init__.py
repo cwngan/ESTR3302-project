@@ -52,8 +52,31 @@ def mean_square_error(prediction: np.ndarray, known: np.ndarray):
     return mse / ts
 
 
+def mean_square_error_entries(
+    entry_prediction: np.ndarray, entries: list[tuple[int]], known: np.ndarray
+):
+    """
+    Calculate the mean square error between entry prediction and known values.
+    """
+    entries_array = np.array(entries)
+    ts = len(entries)
+    mse = np.ma.sum(
+        (entry_prediction - known[entries_array[:, 0], entries_array[:, 1]]) ** 2
+    )
+    return mse / ts
+
+
 def root_mean_square_error(prediction: np.ndarray, known: np.ndarray):
     """
     Calculate the root mean square error between prediction and known values.
     """
     return mean_square_error(prediction, known) ** 0.5
+
+
+def root_mean_square_error_entries(
+    entry_prediction: np.ndarray, entries: list[tuple[int]], known: np.ndarray
+):
+    """
+    Calculate the root mean square error between entry prediction and known values.
+    """
+    return mean_square_error_entries(entry_prediction, entries, known) ** 0.5
