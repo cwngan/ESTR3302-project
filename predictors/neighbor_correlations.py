@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Any, override
 import numpy as np
+from tqdm import tqdm
 from predictors import Predictor
 from predictors.least_squares import LeastSquaresPredictor
 from utils.neighbor_selection import most_similar
@@ -103,65 +104,98 @@ class NeighborCorrelationsPredictor(Predictor):
         return D
 
     @override
-    def predict(self, entries):
+    def predict(self, entries, quiet=False):
         if (
             self.neighbor_table is None
             or self.error is None
             or self.cosine_coefficients is None
         ):
             raise RuntimeError("Predictor has not been trained yet")
-        result = self.baseline.predict(entries)
+        print("Predicting entries...")
+        result = self.baseline.predict(entries, quiet=True)
         error = self.error
+        training_data = self.training_data
         if self.correlation == Correlation.USER:
             error = error.T
-        for idx, entry in enumerate(entries):
+            training_data = training_data.T
+        for idx, entry in enumerate(tqdm(entries, disable=quiet)):
             u, i = entry
             if self.correlation == Correlation.USER:
                 u, i = i, u
-            d_sum = sum(
-                abs(self.cosine_coefficients[i][j]) for j in self.neighbor_table[u][i]
-            )
-            for j in self.neighbor_table[u][i]:
-                result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
-        return np.clip(result, min=1, max=5)
-
-    @override
-    def predict_all(self):
-        if (
-            self.neighbor_table is None
-            or self.error is None
-            or self.cosine_coefficients is None
-        ):
-            raise RuntimeError("Predictor has not been trained yet")
-        n, m = self.training_data.shape
-        error = self.error
-        if self.correlation == Correlation.USER:
-            n, m = m, n
-            error = error.T
-        result = (
-            self.baseline.predict_all().copy()
-            if self.correlation == Correlation.ITEM
-            else self.baseline.predict_all().T.copy()
-        )
-        for u in range(n):
-            for i in range(m):
+            if not isinstance(self.neighbor_table[u][i], int):
                 d_sum = sum(
                     abs(self.cosine_coefficients[i][j])
                     for j in self.neighbor_table[u][i]
                 )
+                if d_sum == 0:
+                    continue
                 for j in self.neighbor_table[u][i]:
+                    result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
+            else:
+                j = self.neighbor_table[u][i]
+                if np.ma.is_masked(training_data[u][j]):
+                    continue
+                d_sum = abs(self.cosine_coefficients[i][j])
+                if d_sum == 0:
+                    continue
+                result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
+        print("Finished predicting entries.")
+        return np.clip(result, min=1, max=5)
+
+    @override
+    def predict_all(self, quiet=False):
+        if (
+            self.neighbor_table is None
+            or self.error is None
+            or self.cosine_coefficients is None
+        ):
+            raise RuntimeError("Predictor has not been trained yet")
+        print("Predicting all...")
+        n, m = self.training_data.shape
+        training_data = self.training_data
+        error = self.error
+        if self.correlation == Correlation.USER:
+            n, m = m, n
+            error = error.T
+            training_data = training_data.T
+        result = (
+            self.baseline.predict_all(quiet=True).copy()
+            if self.correlation == Correlation.ITEM
+            else self.baseline.predict_all(quiet=True).T.copy()
+        )
+        for u in tqdm(range(n), disable=quiet):
+            for i in range(m):
+                if not isinstance(self.neighbor_table[u][i], int):
+                    d_sum = sum(
+                        abs(self.cosine_coefficients[i][j])
+                        for j in self.neighbor_table[u][i]
+                    )
+                    if d_sum == 0:
+                        continue
+                    for j in self.neighbor_table[u][i]:
+                        result[u][i] += (
+                            self.cosine_coefficients[i][j] / d_sum * error[u][j]
+                        )
+                else:
+                    j = self.neighbor_table[u][i]
+                    if np.ma.is_masked(training_data[u][j]):
+                        continue
+                    d_sum = abs(self.cosine_coefficients[i][j])
+                    if d_sum == 0:
+                        continue
                     result[u][i] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
         predictions = np.clip(result, min=1, max=5)
         if self.correlation == Correlation.USER:
             predictions = predictions.T
+        print("Finished predicting all.")
         return predictions
 
     @override
     def train(self, get_neighbors: Any = most_similar):
         print("Calculating cosine similarity coefficients...")
-        self.error = (
-            np.ma.masked_less(self.training_data, 0) - self.baseline.predict_all()
-        )
+        self.error = np.ma.masked_less(
+            self.training_data, 0
+        ) - self.baseline.predict_all(quiet=True)
         self.cosine_coefficients = self._find_cosine_coefficients(self.error)
         print("Making neighbor table...")
         self.neighbor_table = get_neighbors(
@@ -172,4 +206,4 @@ class NeighborCorrelationsPredictor(Predictor):
             ),
             cosine_coefficients=self.cosine_coefficients,
         )
-        print("Finish training.")
+        print("Finished training.")

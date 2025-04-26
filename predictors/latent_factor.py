@@ -38,22 +38,29 @@ class LatentFactorPredictor(Predictor):
         self.p = p if p is not None else np.random.rand(k, u) * 10.0 - 5
         self.q = q if q is not None else np.random.rand(k, i) * 10.0 - 5
         self.lmda = lmda
-        self.train()
 
     @override
-    def predict(self, entries):
+    def predict(self, entries, quiet=False):
+        if not quiet:
+            print("Predicting entries...")
         res = np.zeros(len(entries))
-        for idx, entry in enumerate(entries):
+        for idx, entry in enumerate(tqdm(entries, disable=quiet)):
             u, i = entry
             res[idx] = self.p[:, [u]].T @ self.q[:, [i]]
+        if not quiet:
+            print("Finished predicting entries.")
         return res
 
     @override
-    def predict_all(self):
+    def predict_all(self, quiet=False):
+        if not quiet:
+            print("Predicting all...")
         prediction = np.zeros(shape=self.training_data.shape, dtype=np.float64)
-        for u in range(self.training_data.shape[0]):
+        for u in tqdm(range(self.training_data.shape[0]), disable=quiet):
             for i in range(self.training_data.shape[1]):
-                prediction[u, i] = self.predict([(u, i)])
+                prediction[u, i] = self.predict([(u, i)], quiet=True)
+        if not quiet:
+            print("Finished predicting all.")
         return prediction
 
     @override
@@ -61,6 +68,7 @@ class LatentFactorPredictor(Predictor):
         """
         Optimized by o3-mini from `old_train`.
         """
+        print("Preparing data for training...")
         R = self.training_data
         n, m = R.shape
         k = self.k
@@ -75,10 +83,11 @@ class LatentFactorPredictor(Predictor):
         # 2) cache I_k
         I_k = np.eye(k, dtype=np.float64)
 
+        print("Performing alternating least squares...")
         # 3) ALS loop
         for _ in tqdm(range(iterations)):
             # update Q (item factors)
-            for i, users in enumerate(tqdm(users_by_item, leave=False)):
+            for i, users in enumerate(users_by_item):
                 if users.size == 0:
                     continue
                 # P_u: k×|U_i|
@@ -93,7 +102,7 @@ class LatentFactorPredictor(Predictor):
                 self.q[:, i] = np.linalg.solve(A, b)
 
             # update P (user factors)
-            for u, items in enumerate(tqdm(items_by_user, leave=False)):
+            for u, items in enumerate(items_by_user):
                 if items.size == 0:
                     continue
                 Q_i = self.q[:, items]
@@ -101,10 +110,11 @@ class LatentFactorPredictor(Predictor):
                 r_vec = R[u, items].astype(np.float64)
                 b = Q_i @ r_vec
                 self.p[:, u] = np.linalg.solve(A, b)
+        print("Finished training.")
 
     def old_train(self, iterations: int = 20):
-        for _ in range(iterations):
-            for i in range(self.training_data.shape[1]):
+        for _ in tqdm(range(iterations)):
+            for i in tqdm(range(self.training_data.shape[1]), leave=False):
                 u_i = list(
                     filter(
                         partial(
@@ -114,6 +124,8 @@ class LatentFactorPredictor(Predictor):
                         list(range(self.training_data.shape[0])),
                     )
                 )
+                if len(u_i) == 0:
+                    continue
                 left_sum = np.sum(
                     self.p[:, [u]] @ self.p[:, [u]].T for u in u_i
                 ) + self.lmda * np.identity(self.k)
@@ -121,7 +133,7 @@ class LatentFactorPredictor(Predictor):
                     self.training_data[u, i] * self.p[:, [u]] for u in u_i
                 )
                 self.q[:, [i]] = np.linalg.solve(left_sum, right_sum)
-            for u in range(self.training_data.shape[0]):
+            for u in tqdm(range(self.training_data.shape[0]), leave=False):
                 i_u = list(
                     filter(
                         partial(
@@ -131,6 +143,8 @@ class LatentFactorPredictor(Predictor):
                         list(range(self.training_data.shape[1])),
                     )
                 )
+                if len(i_u) == 0:
+                    continue
                 left_sum = np.sum(
                     self.q[:, [i]] @ self.q[:, [i]].T for i in i_u
                 ) + self.lmda * np.identity(self.k)

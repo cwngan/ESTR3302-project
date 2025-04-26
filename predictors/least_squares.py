@@ -23,33 +23,37 @@ class LeastSquaresPredictor(Predictor):
         self.average_rating = average(self.training_data)
 
     @override
-    def predict(self, entries):
+    def predict(self, entries, quiet=False):
         if self.b is None:
             raise RuntimeError("Predictor not trained yet.")
         output = [0.0] * len(entries)
-        print("Predicting entries...")
-        for idx, entry in enumerate(tqdm(entries)):
+        if not quiet:
+            print("Predicting entries...")
+        for idx, entry in enumerate(tqdm(entries, disable=quiet)):
             i, j = entry
             output[idx] = (
                 self.average_rating + self.b[i] + self.b[len(self.training_data) + j]
             )
-        print("Finish predicting entries.")
+        if not quiet:
+            print("Finished predicting entries.")
         return np.clip(output, 1, 5)
 
     @override
-    def predict_all(self):
+    def predict_all(self, quiet=False):
         if self.b is None:
             raise RuntimeError("Predictor not trained yet.")
-        print("Predicting all...")
+        if not quiet:
+            print("Predicting all...")
         prediction = np.zeros(shape=self.training_data.shape, dtype=np.float64)
-        for i in tqdm(range(np.size(self.training_data, 0))):
+        for i in tqdm(range(np.size(self.training_data, 0)), disable=quiet):
             for j in range(np.size(self.training_data, 1)):
                 prediction[i][j] = (
                     self.average_rating
                     + self.b[i]
                     + self.b[len(self.training_data) + j]
                 )
-        print("Finish predicting all.")
+        if not quiet:
+            print("Finished predicting all.")
         return prediction.clip(min=1, max=5)
 
     @override

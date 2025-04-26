@@ -10,14 +10,14 @@ class Predictor(ABC):
     training_data: np.ndarray
 
     @abstractmethod
-    def predict(self, entries: list[tuple[int]]) -> list[float]:
+    def predict(self, entries: list[tuple[int]], quiet: bool) -> list[float]:
         """
         Predict the rating for given users and items.
         """
         raise NotImplementedError("Subclasses should implement this method.")
 
     @abstractmethod
-    def predict_all(self) -> np.ndarray:
+    def predict_all(self, quiet: bool) -> np.ndarray:
         """
         Predict the rating for all users and items.
         """
