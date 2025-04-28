@@ -96,7 +96,7 @@ def csr_get_entries(matrix: csr_matrix, entries: list[tuple[int]]) -> list[float
     Helper function to extract values from a csr_matrix at given (row, col) entries.
     """
     result = []
-    for r, c in entries:
+    for r, c in tqdm(entries):
         row_start = matrix.indptr[r]
         row_end = matrix.indptr[r + 1]
         # Use binary search on the sorted indices for this row.
