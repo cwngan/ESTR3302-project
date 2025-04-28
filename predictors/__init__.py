@@ -10,7 +10,7 @@ class Predictor(ABC):
     training_data: np.ndarray
 
     @abstractmethod
-    def predict(self, entries: list[tuple[int]], quiet: bool) -> list[float]:
+    def predict(self, entries: list[tuple[int]], quiet: bool) -> np.ndarray:
         """
         Predict the rating for given users and items.
         """
