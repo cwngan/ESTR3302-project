@@ -3,3 +3,4 @@
 samples/*.json
 **/.DS_Store
 data
+models
