@@ -5,6 +5,7 @@ from tqdm import tqdm
 from predictors import Predictor
 from predictors.least_squares import LeastSquaresPredictor
 from utils.neighbor_selection import most_similar
+from scipy.sparse import csr_matrix
 
 
 class Correlation(Enum):
@@ -28,7 +29,7 @@ class NeighborCorrelationsPredictor(Predictor):
     def __init__(
         self,
         correlation: Correlation,
-        training_data: np.ndarray = None,
+        training_data: csr_matrix = None,
         lmda: float = None,
         baseline: LeastSquaresPredictor = None,
     ):
@@ -42,43 +43,37 @@ class NeighborCorrelationsPredictor(Predictor):
             self.baseline = baseline
         self.correlation = correlation
 
-    def _find_cosine_coefficients(self, data: np.ma):
+    def _find_cosine_coefficients(self, data: csr_matrix):
         """
-        Vectorized cosine–similarity (zeroing any position masked in either column).
+        Vectorized cosine–similarity (ignoring values equal to 0 as missing).
+        Uses sparse matrix multiplication to optimize computation.
 
         Optimized by o3-mini from `_old_find_cosin_coefficients`.
         """
-        # if you want user–user rather than item–item, just transpose once
+        # If user–user similarity is needed, work on transposed data
         if self.correlation == Correlation.USER:
             data = data.T
 
-        # data may be a MaskedArray; extract mask and fill masked slots with 0
-        mask = np.ma.getmask(data)  # True where missing
-        X = data.filled(0.0)  # numeric array, zeros at masked
+        # The numerator: dot product of columns (only nonzero entries contribute)
+        numerator = data.T @ data  # sparse matrix multiplication
+        numerator = numerator.toarray()  # convert to dense array
 
-        # M[k,i] = 1.0 if data[k,i] is present, else 0.0
-        M = (~mask).astype(np.float64)
+        # Compute the Euclidean norm for each column (only nonzero entries count)
+        squared = data.copy()
+        squared.data **= 2
+        norm = np.sqrt(np.array(squared.sum(axis=0)).ravel())
 
-        # 1) Numerator matrix: for each (i,j), sum_k X[k,i]*X[k,j] * (zeros handle masking)
-        D_num = X.T @ X  # shape (m,m)
+        # Outer product of norms for every pair of columns
+        denom = np.outer(norm, norm)
+        denom[denom == 0] = 1.0  # avoid division by zero
 
-        # 2) We need for each (i,j) the norms of column i & j after zeroing any position masked in the other:
-        #    S_i_j = sum_k X[k,i]^2 * M[k,j]
-        #    S_j_i = sum_k X[k,j]^2 * M[k,i]
-        sq = X * X
-        S_i_j = sq.T @ M  # shape (m,m)
-        # S_j_i = (M.T @ sq)  which is just S_i_j.T
+        # Final cosine similarity matrix
+        cosine = numerator / denom
 
-        # 3) denominator matrix and final cosine
-        denom = np.sqrt(S_i_j * S_i_j.T)  # elementwise sqrt
-        # avoid divide-by-zero
-        denom[denom == 0] = 1.0
-        D = D_num / denom
+        # Zero out the diagonal (self-similarity)
+        np.fill_diagonal(cosine, 0.0)
 
-        # zero out diagonal (self-similarity)
-        np.fill_diagonal(D, 0.0)
-
-        return D
+        return cosine
 
     def _old_find_cosine_coefficients(self, data: np.ndarray):
         """
@@ -140,7 +135,7 @@ class NeighborCorrelationsPredictor(Predictor):
                     continue
                 result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
         print("Finished predicting entries.")
-        return np.clip(result, min=1, max=5)
+        return np.clip(result, min=0.5, max=5)
 
     @override
     def predict_all(self, quiet=False):
@@ -184,7 +179,7 @@ class NeighborCorrelationsPredictor(Predictor):
                     if d_sum == 0:
                         continue
                     result[u][i] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
-        predictions = np.clip(result, min=1, max=5)
+        predictions = np.clip(result, min=0.5, max=5)
         if self.correlation == Correlation.USER:
             predictions = predictions.T
         print("Finished predicting all.")

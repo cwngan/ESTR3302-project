@@ -17,7 +17,7 @@ class LeastSquaresPredictor(Predictor):
     b: np.ndarray = None
     average_rating: float
 
-    def __init__(self, training_data: np.ndarray, lmda: float):
+    def __init__(self, training_data: csr_matrix, lmda: float):
         self.training_data = training_data
         self.lmda = lmda
         self.average_rating = average(self.training_data)
@@ -32,7 +32,9 @@ class LeastSquaresPredictor(Predictor):
         for idx, entry in enumerate(tqdm(entries, disable=quiet)):
             i, j = entry
             output[idx] = (
-                self.average_rating + self.b[i] + self.b[len(self.training_data) + j]
+                self.average_rating
+                + self.b[i]
+                + self.b[self.training_data.shape[0] + j]
             )
         if not quiet:
             print("Finished predicting entries.")
@@ -44,17 +46,20 @@ class LeastSquaresPredictor(Predictor):
             raise RuntimeError("Predictor not trained yet.")
         if not quiet:
             print("Predicting all...")
-        prediction = np.zeros(shape=self.training_data.shape, dtype=np.float64)
-        for i in tqdm(range(np.size(self.training_data, 0)), disable=quiet):
-            for j in range(np.size(self.training_data, 1)):
-                prediction[i][j] = (
-                    self.average_rating
-                    + self.b[i]
-                    + self.b[len(self.training_data) + j]
-                )
+        rows, cols = self.training_data.nonzero()
+        data = []
+        for i, j in tqdm(zip(rows, cols), total=len(rows), disable=quiet):
+            pred = (
+                self.average_rating
+                + self.b[i]
+                + self.b[self.training_data.shape[0] + j]
+            )
+            data.append(pred)
+        data = np.clip(data, 1, 5)
+        prediction = csr_matrix((data, (rows, cols)), shape=self.training_data.shape)
         if not quiet:
             print("Finished predicting all.")
-        return prediction.clip(min=1, max=5)
+        return prediction
 
     @override
     def train(self):
@@ -64,23 +69,23 @@ class LeastSquaresPredictor(Predictor):
         Optimized by o3-mini from `old_train`.
         """
         print("Constructing relevant matrices...", flush=True)
-        # number of ratings per user u and per item i
-        N_u = np.sum(~np.ma.getmask(self.training_data), axis=1)  # shape (n,)
-        N_i = np.sum(~np.ma.getmask(self.training_data), axis=0)  # shape (m,)
+        # number of ratings per user u and per item i (non-zero entries)
+        N_u = self.training_data.getnnz(axis=1)  # shape (n,)
+        N_i = self.training_data.getnnz(axis=0)  # shape (m,)
 
-        C = self.training_data - self.average_rating
-        uc = np.array(C.sum(axis=1))
-        ic = np.array(C.sum(axis=0))
+        C = self.training_data.copy()
+        C.data = C.data - self.average_rating
+        uc = np.array(C.sum(axis=1)).flatten()
+        ic = np.array(C.sum(axis=0)).flatten()
         rhs = np.concatenate([uc, ic])
 
         U = diags(N_u + self.lmda)
         I = diags(N_i + self.lmda)
         # off‐diagonals: rating adjacency as sparse
-
-        mask = ~np.ma.getmask(self.training_data)
-        # build sparse mask matrix M of shape (n,m)
-        M = csr_matrix(mask.astype(np.float64))
-        AAT = bmat([[U, M], [M.T, I]])
+        # build sparse mask matrix M where nonzero entries indicate known ratings
+        M = self.training_data.copy()
+        M.data = np.ones_like(M.data)
+        AAT = bmat([[U, M], [M.T, I]], format="csr")
         print("Calculating user and item biases...", flush=True)
         self.b = spsolve(AAT, rhs)
         print("Training done.")

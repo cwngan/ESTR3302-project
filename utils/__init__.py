@@ -1,11 +1,7 @@
 from typing import Any
 import numpy as np
-
-
-def mask_unknown_values(training_data: Any):
-    res = np.array(training_data, dtype=np.float64)
-    mask = np.less(training_data, 0)
-    return np.ma.masked_array(res, np.ma.make_mask(mask))
+from collections import defaultdict
+from scipy.sparse import csr_matrix
 
 
 def get_test_set_mask(test_set: list[tuple[int]], shape: tuple[int]):
@@ -18,55 +14,123 @@ def get_test_set_mask(test_set: list[tuple[int]], shape: tuple[int]):
     return np.ma.make_mask(mask)
 
 
-def average(data: np.ndarray):
+def average(data: csr_matrix):
     """
-    Find the average of a matrix ignoring negative values.
+    Find the average of a csr_matrix ignoring stored zero and negative values.
+    Only nonzero positive values are averaged.
     """
-    masked_data = np.ma.masked_less(data, 0)
-    return np.average(masked_data)
+    # Extract the non-zero stored entries from the matrix
+    if not isinstance(data, csr_matrix):
+        raise ValueError("Input must be a csr_matrix")
+
+    # Filter out zero and negative values from the stored data
+    positive_entries = data.data[data.data > 0]
+    if positive_entries.size == 0:
+        return 0
+    return np.average(positive_entries)
 
 
 def remove_test_set(training_data: Any, test_set: list[tuple[int]]):
     """
-    Returns a copy of the training set with items in test set set to -1.
+    Returns a copy of the training set (a csr matrix) with items in the test set set to 0.
+    This version groups test_set indices by row to reduce Python looping.
     """
-    res = mask_unknown_values(training_data)
-    return np.ma.masked_array(res, get_test_set_mask(test_set, res.shape))
+
+    # Work directly with the CSR matrix
+    res = training_data.copy()
+
+    # Group test_set indices by row
+    rows_to_cols = defaultdict(list)
+    for i, j in test_set:
+        rows_to_cols[i].append(j)
+
+    # For each affected row, set matching entries to 0
+    for i, cols in rows_to_cols.items():
+        start, end = res.indptr[i], res.indptr[i + 1]
+        row_cols = res.indices[start:end]
+        cols_array = np.array(cols, dtype=row_cols.dtype)
+        mask = np.isin(row_cols, cols_array)
+        res.data[start:end][mask] = 0
+
+    res.eliminate_zeros()
+    return res.tocsr()
 
 
 def get_test_set_matrix(training_data: Any, test_set: list[tuple[int]]):
     """
-    Returns a matrix representing the data of the test set.
+    Returns a csr matrix representing the data of the test set.
+    Only the entries specified in test_set are retained.
     """
-    res = np.array(training_data, dtype=np.float64)
-    return np.ma.masked_array(res, ~get_test_set_mask(test_set, res.shape))
+
+    # Group test_set indices by row for fast lookup.
+    rows_to_cols = defaultdict(set)
+    for i, j in test_set:
+        rows_to_cols[i].add(j)
+
+    # Build the data for the new sparse matrix.
+    row_indices = []
+    col_indices = []
+    values = []
+
+    # Iterate only over rows present in the test_set.
+    for i, cols_set in rows_to_cols.items():
+        start, end = training_data.indptr[i], training_data.indptr[i + 1]
+        row_cols = training_data.indices[start:end]
+        row_data = training_data.data[start:end]
+        mask = np.isin(row_cols, list(cols_set))
+        if np.any(mask):
+            row_indices.extend([i] * np.count_nonzero(mask))
+            col_indices.extend(row_cols[mask])
+            values.extend(row_data[mask])
+
+    return csr_matrix((values, (row_indices, col_indices)), shape=training_data.shape)
 
 
-def mean_square_error(prediction: np.ndarray, known: np.ndarray):
+def csr_get_entries(matrix: csr_matrix, entries: list[tuple[int]]) -> list[float]:
+    """
+    Helper function to extract values from a csr_matrix at given (row, col) entries.
+    """
+    result = []
+    for r, c in entries:
+        row_start = matrix.indptr[r]
+        row_end = matrix.indptr[r + 1]
+        # Use binary search on the sorted indices for this row.
+        pos = np.searchsorted(matrix.indices[row_start:row_end], c)
+        if pos < (row_end - row_start) and matrix.indices[row_start + pos] == c:
+            result.append(matrix.data[row_start + pos])
+        else:
+            result.append(0)
+    return result
+
+
+def mean_square_error(prediction: csr_matrix, known: csr_matrix):
     """
     Calculate the mean square error between prediction and known values.
+    All entries in the matrices are compared. The error is computed as the
+    sum over squared differences divided by the total number of elements.
     """
-    total_mask = ~(np.ma.getmaskarray(prediction) | np.ma.getmaskarray(known))
-    ts = np.count_nonzero(total_mask)
-    mse = np.ma.sum((prediction - known) ** 2)
-    return mse / ts
+    diff = prediction - known
+    diff_array = np.array(diff.data)
+    # Compute element-wise square of the differences.
+    mse = (diff_array * diff_array).sum()
+    return mse / len(diff_array)
 
 
 def mean_square_error_entries(
-    entry_prediction: np.ndarray, entries: list[tuple[int]], known: np.ndarray
+    entry_prediction: np.ndarray, entries: list[tuple[int]], known: csr_matrix
 ):
     """
-    Calculate the mean square error between entry prediction and known values.
+    Calculate the mean square error between entry_prediction and known values
+    at the specified (row, col) entries.
     """
-    entries_array = np.array(entries)
-    ts = len(entries)
-    mse = np.ma.sum(
-        (entry_prediction - known[entries_array[:, 0], entries_array[:, 1]]) ** 2
-    )
-    return mse / ts
+    # Retrieve values for each requested entry.
+    pred_vals = entry_prediction
+    known_vals = np.array(csr_get_entries(known, entries))
+    mse = ((pred_vals - known_vals) ** 2).sum()
+    return mse / len(entries)
 
 
-def root_mean_square_error(prediction: np.ndarray, known: np.ndarray):
+def root_mean_square_error(prediction: csr_matrix, known: csr_matrix):
     """
     Calculate the root mean square error between prediction and known values.
     """
@@ -74,9 +138,10 @@ def root_mean_square_error(prediction: np.ndarray, known: np.ndarray):
 
 
 def root_mean_square_error_entries(
-    entry_prediction: np.ndarray, entries: list[tuple[int]], known: np.ndarray
+    entry_prediction: csr_matrix, entries: list[tuple[int]], known: csr_matrix
 ):
     """
-    Calculate the root mean square error between entry prediction and known values.
+    Calculate the root mean square error between entry_prediction and known values
+    at the specified (row, col) entries.
     """
     return mean_square_error_entries(entry_prediction, entries, known) ** 0.5

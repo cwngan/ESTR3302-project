@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from scipy.sparse import csr_matrix
 
 
 class Predictor(ABC):
@@ -7,7 +8,7 @@ class Predictor(ABC):
     Abstract base class for all predictors.
     """
 
-    training_data: np.ndarray
+    training_data: csr_matrix
 
     @abstractmethod
     def predict(self, entries: list[tuple[int]], quiet: bool) -> np.ndarray:
