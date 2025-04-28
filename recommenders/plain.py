@@ -26,5 +26,4 @@ class PlainRecommender(Recommender):
             entries=[(user, i) for i in range(self.items)], quiet=True
         )
         res = np.argsort(scores)[::-1][:count]
-        print(np.sort(scores)[::-1][:count])
         return res
