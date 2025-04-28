@@ -1,4 +1,3 @@
-from functools import partial
 from typing import override
 import numpy as np
 from tqdm import tqdm
@@ -14,13 +13,13 @@ class LatentFactorPredictor(Predictor):
     k: int
     p: np.ndarray
     q: np.ndarray
+    shape: tuple[int]
     lmda: float
-    training_data: csr_matrix
 
     def __init__(
         self,
-        training_data: csr_matrix,
         k: int,
+        shape: tuple[int],
         p: np.ndarray = None,
         q: np.ndarray = None,
         lmda: float = 0,
@@ -34,9 +33,9 @@ class LatentFactorPredictor(Predictor):
             p (np.ndarray, optional): The user latent factors.
             q (np.ndarray, optional): The item latent factors.
         """
-        self.training_data = training_data
         self.k = k
-        n, m = training_data.shape
+        self.shape = shape
+        n, m = shape
         self.p = p if p is not None else np.random.rand(k, n) - 0.5
         self.q = q if q is not None else np.random.rand(k, m) - 0.5
         self.lmda = lmda
@@ -57,7 +56,7 @@ class LatentFactorPredictor(Predictor):
     def predict_all(self, quiet=False):
         if not quiet:
             print("Predicting all...")
-        n, m = self.training_data.shape
+        n, m = self.shape
         prediction = np.zeros((n, m), dtype=np.float64)
         for u in tqdm(range(n), disable=quiet):
             for i in range(m):
@@ -68,13 +67,17 @@ class LatentFactorPredictor(Predictor):
         return np.clip(prediction, 0.5, 5)
 
     @override
-    def train(self, iterations: int = 20):
+    def train(self, training_data: csr_matrix, iterations: int = 20):
         """
         Optimized alternating least squares using sparse training data.
         """
         print("Preparing data for training...")
-        R = self.training_data
-        n, m = R.shape
+        R = training_data
+        n, m = self.shape
+        if self.shape != R.shape:
+            raise ValueError(
+                f"Training data shape {R.shape} does not match predictor shape {self.shape}."
+            )
         k = self.k
         lmda = self.lmda
 
@@ -112,29 +115,33 @@ class LatentFactorPredictor(Predictor):
                 self.p[:, u] = np.linalg.solve(A, b)
         print("Finished training.")
 
-    def old_train(self, iterations: int = 20):
+    def old_train(self, training_data: csr_matrix, iterations: int = 20):
+        if self.shape != training_data.shape:
+            raise ValueError(
+                f"Training data shape {training_data.shape} does not match predictor shape {self.shape}."
+            )
         for _ in tqdm(range(iterations)):
-            for i in tqdm(range(self.training_data.shape[1]), leave=False):
+            for i in tqdm(range(self.shape[1]), leave=False):
                 # Get users who rated item i.
-                u_i = list(self.training_data.getcol(i).indices)
+                u_i = list(training_data.getcol(i).indices)
                 if len(u_i) == 0:
                     continue
                 left_sum = sum(
                     self.p[:, [u]] @ self.p[:, [u]].T for u in u_i
                 ) + self.lmda * np.identity(self.k)
                 right_sum = sum(
-                    float(self.training_data[u, i]) * self.p[:, [u]] for u in u_i
+                    float(training_data[u, i]) * self.p[:, [u]] for u in u_i
                 )
                 self.q[:, i] = np.linalg.solve(left_sum, right_sum)
-            for u in tqdm(range(self.training_data.shape[0]), leave=False):
+            for u in tqdm(range(self.shape[0]), leave=False):
                 # Get items rated by user u.
-                i_u = list(self.training_data.getrow(u).indices)
+                i_u = list(training_data.getrow(u).indices)
                 if len(i_u) == 0:
                     continue
                 left_sum = sum(
                     self.q[:, [i]] @ self.q[:, [i]].T for i in i_u
                 ) + self.lmda * np.identity(self.k)
                 right_sum = sum(
-                    float(self.training_data[u, i]) * self.q[:, [i]] for i in i_u
+                    float(training_data[u, i]) * self.q[:, [i]] for i in i_u
                 )
                 self.p[:, u] = np.linalg.solve(left_sum, right_sum)

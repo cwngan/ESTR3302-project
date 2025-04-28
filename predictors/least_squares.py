@@ -17,10 +17,9 @@ class LeastSquaresPredictor(Predictor):
     b: np.ndarray = None
     average_rating: float
 
-    def __init__(self, training_data: csr_matrix, lmda: float):
-        self.training_data = training_data
+    def __init__(self, lmda: float, shape: tuple[int]):
         self.lmda = lmda
-        self.average_rating = average(self.training_data)
+        self.shape = shape
 
     @override
     def predict(self, entries, quiet=False):
@@ -31,11 +30,7 @@ class LeastSquaresPredictor(Predictor):
             print("Predicting entries...")
         for idx, entry in enumerate(tqdm(entries, disable=quiet)):
             i, j = entry
-            output[idx] = (
-                self.average_rating
-                + self.b[i]
-                + self.b[self.training_data.shape[0] + j]
-            )
+            output[idx] = self.average_rating + self.b[i] + self.b[self.shape[0] + j]
         if not quiet:
             print("Finished predicting entries.")
         return np.clip(output, 1, 5)
@@ -46,23 +41,19 @@ class LeastSquaresPredictor(Predictor):
             raise RuntimeError("Predictor not trained yet.")
         if not quiet:
             print("Predicting all...")
-        rows, cols = self.training_data.nonzero()
-        data = []
-        for i, j in tqdm(zip(rows, cols), total=len(rows), disable=quiet):
-            pred = (
-                self.average_rating
-                + self.b[i]
-                + self.b[self.training_data.shape[0] + j]
-            )
-            data.append(pred)
+        data = np.zeros(shape=self.shape, dtype=np.float64)
+        for i in range(self.shape[0]):
+            for j in range(self.shape[1]):
+                pred = self.average_rating + self.b[i] + self.b[self.shape[0] + j]
+                data[i, j] = pred
         data = np.clip(data, 1, 5)
-        prediction = csr_matrix((data, (rows, cols)), shape=self.training_data.shape)
+        # prediction = csr_matrix((data, (rows, cols)), shape=self.shape)
         if not quiet:
             print("Finished predicting all.")
-        return prediction
+        return data
 
     @override
-    def train(self):
+    def train(self, training_data):
         """
         Train the predictor using the training data using sparse matrices.
 
@@ -70,10 +61,12 @@ class LeastSquaresPredictor(Predictor):
         """
         print("Constructing relevant matrices...", flush=True)
         # number of ratings per user u and per item i (non-zero entries)
-        N_u = self.training_data.getnnz(axis=1)  # shape (n,)
-        N_i = self.training_data.getnnz(axis=0)  # shape (m,)
+        N_u = training_data.getnnz(axis=1)  # shape (n,)
+        N_i = training_data.getnnz(axis=0)  # shape (m,)
 
-        C = self.training_data.copy()
+        self.average_rating = average(training_data)
+
+        C: csr_matrix = training_data.copy()
         C.data = C.data - self.average_rating
         uc = np.array(C.sum(axis=1)).flatten()
         ic = np.array(C.sum(axis=0)).flatten()
@@ -83,24 +76,24 @@ class LeastSquaresPredictor(Predictor):
         I = diags(N_i + self.lmda)
         # off‐diagonals: rating adjacency as sparse
         # build sparse mask matrix M where nonzero entries indicate known ratings
-        M = self.training_data.copy()
+        M = training_data.copy()
         M.data = np.ones_like(M.data)
         AAT = bmat([[U, M], [M.T, I]], format="csr")
         print("Calculating user and item biases...", flush=True)
         self.b = spsolve(AAT, rhs)
         print("Training done.")
 
-    def old_train(self):
+    def old_train(self, training_data: csr_matrix):
         """
         Train the predictor naively using the training data.
         """
-        n, m = self.training_data.shape
+        n, m = self.shape
         a = np.zeros(shape=(n * m, n + m), dtype=np.float64)
         c = np.zeros(shape=(n * m, 1), dtype=np.float64)
 
         curr_col = 0
 
-        for i, row in enumerate(self.training_data):
+        for i, row in enumerate(training_data):
             for j, col in enumerate(row):
                 if np.ma.is_masked(col):
                     continue

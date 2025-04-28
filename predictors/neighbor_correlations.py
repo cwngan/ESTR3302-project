@@ -25,55 +25,61 @@ class NeighborCorrelationsPredictor(Predictor):
     cosine_coefficients: np.ndarray = None
     correlation: Correlation
     neighbor_table: np.ndarray = None
+    _training_data: csr_matrix = None
 
     def __init__(
         self,
         correlation: Correlation,
-        training_data: csr_matrix = None,
+        shape: tuple[int] = None,
         lmda: float = None,
         baseline: LeastSquaresPredictor = None,
     ):
         if baseline is None:
-            self.training_data = training_data
             self.lmda = lmda
-            self.baseline = LeastSquaresPredictor(training_data, lmda)
+            self.baseline = LeastSquaresPredictor(lmda, shape)
         else:
-            self.training_data = baseline.training_data
             self.lmda = baseline.lmda
             self.baseline = baseline
+        self.shape = shape
         self.correlation = correlation
 
-    def _find_cosine_coefficients(self, data: csr_matrix):
+    def _find_cosine_coefficients(self, data: np.ma):
         """
-        Vectorized cosine–similarity (ignoring values equal to 0 as missing).
-        Uses sparse matrix multiplication to optimize computation.
+        Vectorized cosine–similarity (zeroing any position masked in either column).
 
         Optimized by o3-mini from `_old_find_cosin_coefficients`.
         """
-        # If user–user similarity is needed, work on transposed data
+        # if you want user–user rather than item–item, just transpose once
         if self.correlation == Correlation.USER:
             data = data.T
 
-        # The numerator: dot product of columns (only nonzero entries contribute)
-        numerator = data.T @ data  # sparse matrix multiplication
-        numerator = numerator.toarray()  # convert to dense array
+        # data may be a MaskedArray; extract mask and fill masked slots with 0
+        mask = np.ma.getmask(data)  # True where missing
+        X = data.filled(0.0)  # numeric array, zeros at masked
 
-        # Compute the Euclidean norm for each column (only nonzero entries count)
-        squared = data.copy()
-        squared.data **= 2
-        norm = np.sqrt(np.array(squared.sum(axis=0)).ravel())
+        # M[k,i] = 1.0 if data[k,i] is present, else 0.0
+        M = (~mask).astype(np.float64)
 
-        # Outer product of norms for every pair of columns
-        denom = np.outer(norm, norm)
-        denom[denom == 0] = 1.0  # avoid division by zero
+        # 1) Numerator matrix: for each (i,j), sum_k X[k,i]*X[k,j] * (zeros handle masking)
+        D_num = X.T @ X  # shape (m,m)
 
-        # Final cosine similarity matrix
-        cosine = numerator / denom
+        # 2) We need for each (i,j) the norms of column i & j after zeroing any position masked in the other:
+        #    S_i_j = sum_k X[k,i]^2 * M[k,j]
+        #    S_j_i = sum_k X[k,j]^2 * M[k,i]
+        sq = X * X
+        S_i_j = sq.T @ M  # shape (m,m)
+        # S_j_i = (M.T @ sq)  which is just S_i_j.T
 
-        # Zero out the diagonal (self-similarity)
-        np.fill_diagonal(cosine, 0.0)
+        # 3) denominator matrix and final cosine
+        denom = np.sqrt(S_i_j * S_i_j.T)  # elementwise sqrt
+        # avoid divide-by-zero
+        denom[denom == 0] = 1.0
+        D = D_num / denom
 
-        return cosine
+        # zero out diagonal (self-similarity)
+        np.fill_diagonal(D, 0.0)
+
+        return D
 
     def _old_find_cosine_coefficients(self, data: np.ndarray):
         """
@@ -109,7 +115,7 @@ class NeighborCorrelationsPredictor(Predictor):
         print("Predicting entries...")
         result = self.baseline.predict(entries, quiet=True)
         error = self.error
-        training_data = self.training_data
+        training_data = self._training_data
         if self.correlation == Correlation.USER:
             error = error.T
             training_data = training_data.T
@@ -117,7 +123,7 @@ class NeighborCorrelationsPredictor(Predictor):
             u, i = entry
             if self.correlation == Correlation.USER:
                 u, i = i, u
-            if not isinstance(self.neighbor_table[u][i], int):
+            if not isinstance(self.neighbor_table[u][i], (int, np.int64)):
                 d_sum = sum(
                     abs(self.cosine_coefficients[i][j])
                     for j in self.neighbor_table[u][i]
@@ -146,8 +152,8 @@ class NeighborCorrelationsPredictor(Predictor):
         ):
             raise RuntimeError("Predictor has not been trained yet")
         print("Predicting all...")
-        n, m = self.training_data.shape
-        training_data = self.training_data
+        n, m = self.shape
+        training_data = self._training_data
         error = self.error
         if self.correlation == Correlation.USER:
             n, m = m, n
@@ -186,18 +192,19 @@ class NeighborCorrelationsPredictor(Predictor):
         return predictions
 
     @override
-    def train(self, get_neighbors: Any = most_similar):
+    def train(self, training_data: csr_matrix, get_neighbors: Any = most_similar):
         print("Calculating cosine similarity coefficients...")
-        self.error = np.ma.masked_less(
-            self.training_data, 0
+        self._training_data = np.ma.masked_equal(training_data.toarray(), 0)
+        self.error = np.ma.masked_equal(
+            self._training_data, 0
         ) - self.baseline.predict_all(quiet=True)
         self.cosine_coefficients = self._find_cosine_coefficients(self.error)
         print("Making neighbor table...")
         self.neighbor_table = get_neighbors(
             training_data=(
-                self.training_data
+                self._training_data
                 if self.correlation == Correlation.ITEM
-                else self.training_data.T
+                else self._training_data.T
             ),
             cosine_coefficients=self.cosine_coefficients,
         )

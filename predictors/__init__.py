@@ -8,7 +8,7 @@ class Predictor(ABC):
     Abstract base class for all predictors.
     """
 
-    training_data: csr_matrix
+    shape: tuple[int]
 
     @abstractmethod
     def predict(self, entries: list[tuple[int]], quiet: bool) -> np.ndarray:
@@ -25,7 +25,7 @@ class Predictor(ABC):
         raise NotImplementedError("Subclasses should implement this method.")
 
     @abstractmethod
-    def train(self):
+    def train(self, training_data: csr_matrix):
         """
         Train the predictor.
         """
