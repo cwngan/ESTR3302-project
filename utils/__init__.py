@@ -2,6 +2,7 @@ from typing import Any
 import numpy as np
 from collections import defaultdict
 from scipy.sparse import csr_matrix
+from tqdm import tqdm
 
 
 def get_test_set_mask(test_set: list[tuple[int]], shape: tuple[int]):
@@ -36,16 +37,17 @@ def remove_test_set(training_data: Any, test_set: list[tuple[int]]):
     This version groups test_set indices by row to reduce Python looping.
     """
 
+    print("Removing test set entries from training data...")
     # Work directly with the CSR matrix
     res = training_data.copy()
 
     # Group test_set indices by row
     rows_to_cols = defaultdict(list)
-    for i, j in test_set:
+    for i, j in tqdm(test_set):
         rows_to_cols[i].append(j)
 
     # For each affected row, set matching entries to 0
-    for i, cols in rows_to_cols.items():
+    for i, cols in tqdm(rows_to_cols.items()):
         start, end = res.indptr[i], res.indptr[i + 1]
         row_cols = res.indices[start:end]
         cols_array = np.array(cols, dtype=row_cols.dtype)
@@ -53,6 +55,7 @@ def remove_test_set(training_data: Any, test_set: list[tuple[int]]):
         res.data[start:end][mask] = 0
 
     res.eliminate_zeros()
+    print("Done removing test set entries.")
     return res.tocsr()
 
 
@@ -62,9 +65,10 @@ def get_test_set_matrix(training_data: Any, test_set: list[tuple[int]]):
     Only the entries specified in test_set are retained.
     """
 
+    print("Getting test set matrix...")
     # Group test_set indices by row for fast lookup.
     rows_to_cols = defaultdict(set)
-    for i, j in test_set:
+    for i, j in tqdm(test_set):
         rows_to_cols[i].add(j)
 
     # Build the data for the new sparse matrix.
@@ -73,7 +77,7 @@ def get_test_set_matrix(training_data: Any, test_set: list[tuple[int]]):
     values = []
 
     # Iterate only over rows present in the test_set.
-    for i, cols_set in rows_to_cols.items():
+    for i, cols_set in tqdm(rows_to_cols.items()):
         start, end = training_data.indptr[i], training_data.indptr[i + 1]
         row_cols = training_data.indices[start:end]
         row_data = training_data.data[start:end]
@@ -83,6 +87,7 @@ def get_test_set_matrix(training_data: Any, test_set: list[tuple[int]]):
             col_indices.extend(row_cols[mask])
             values.extend(row_data[mask])
 
+    print("Done getting test set matrix.")
     return csr_matrix((values, (row_indices, col_indices)), shape=training_data.shape)
 
 
