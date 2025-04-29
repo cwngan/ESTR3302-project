@@ -67,9 +67,11 @@ class LatentFactorPredictor(Predictor):
         return np.clip(prediction, 0.5, 5)
 
     @override
-    def train(self, training_data: csr_matrix, iterations: int = 20):
+    def train(self, training_data: csr_matrix, max_iterations: int = 10000, tol=1e-5):
         """
         Optimized alternating least squares using sparse training data.
+
+        Optimized by o3-mini from `old_train`.
         """
         print("Preparing data for training...")
         R = training_data
@@ -88,7 +90,10 @@ class LatentFactorPredictor(Predictor):
         # ALS loop
         # Convert R to csc format for efficient column slicing during Q updates.
         R_csc = R.tocsc()
-        for _ in tqdm(range(iterations)):
+
+        for _ in tqdm(range(max_iterations)):
+            prev_q = self.q.copy()
+            prev_p = self.p.copy()
             # Update Q (item factors) using csc matrix for fast column access.
             for i in range(m):
                 start, end = R_csc.indptr[i], R_csc.indptr[i + 1]
@@ -113,6 +118,12 @@ class LatentFactorPredictor(Predictor):
                 r_vec = R.data[start:end]
                 b = Q_i @ r_vec
                 self.p[:, u] = np.linalg.solve(A, b)
+            # Check convergence
+            if (
+                np.linalg.norm(self.p - prev_p) < tol
+                and np.linalg.norm(self.q - prev_q) < tol
+            ):
+                break
         print("Finished training.")
 
     def old_train(self, training_data: csr_matrix, iterations: int = 20):
