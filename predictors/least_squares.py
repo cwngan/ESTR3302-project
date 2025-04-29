@@ -31,10 +31,12 @@ class LeastSquaresPredictor(Predictor):
             print("Predicting entries...")
         for idx, entry in enumerate(tqdm(entries, disable=quiet)):
             i, j = entry
-            output[idx] = self.average_rating + self.b[i] + self.b[self.shape[0] + j]
+            output[idx] = np.clip(
+                self.average_rating + self.b[i] + self.b[self.shape[0] + j], 1, 5
+            )
         if not quiet:
             print("Finished predicting entries.")
-        return np.clip(output, 1, 5)
+        return output
 
     @override
     def predict_all(self, quiet=False):
@@ -46,8 +48,7 @@ class LeastSquaresPredictor(Predictor):
         for i in range(self.shape[0]):
             for j in range(self.shape[1]):
                 pred = self.average_rating + self.b[i] + self.b[self.shape[0] + j]
-                data[i, j] = pred
-        data = np.clip(data, 1, 5)
+                data[i, j] = np.clip(pred, 1, 5)
         # prediction = csr_matrix((data, (rows, cols)), shape=self.shape)
         if not quiet:
             print("Finished predicting all.")
