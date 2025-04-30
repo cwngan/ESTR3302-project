@@ -126,17 +126,14 @@ def mean_square_error_entries(
 ):
     """
     Calculate the mean square error between entry_prediction and known values
-    at the specified (row, col) entries using sparse matrix subtraction.
-    Constructs a csr matrix from entry_prediction and entries.
+    at the specified (row, col) entries.
     """
-    print("Converting predictions to csr_matrix...")
-    rows, cols = zip(*entries)
-    pred_matrix = csr_matrix((entry_prediction, (rows, cols)), shape=known.shape)
-    print("Calculating errors...")
-    diff = pred_matrix - known
-    print("Calculating sum of square of errors...")
-    mse = diff.multiply(diff).sum() / len(entries)
-    return mse
+    # Retrieve values for each requested entry.
+    pred_vals = entry_prediction
+    print("Gathering entries from predictions...")
+    known_vals = np.array(csr_get_entries(known, entries))
+    mse = ((pred_vals - known_vals) ** 2).sum()
+    return mse / len(entries)
 
 
 def root_mean_square_error(prediction: csr_matrix, known: csr_matrix):
