@@ -31,9 +31,9 @@ class AuctionRecommender(PlainRecommender):
 
     @override
     def recommend_items(self, user, count):
-        scores = super()._predict_base_scores(user)
-        plain_order = np.ma.argsort(scores, fill_value=-1)[::-1]
-        plain_scores = np.ma.sort(scores, fill_value=-1)[::-1]
+        ratings = super()._predict_base_ratings(user)
+        plain_order = np.ma.argsort(ratings, fill_value=-1)[::-1]
+        plain_ratings = np.ma.sort(ratings, fill_value=-1)[::-1]
         rank_map = {video: rank for rank, video in enumerate(plain_order)}
         bids_by_slot: list[list[tuple[int, int, float]]] = [
             [] for _ in self.promotion_slots
@@ -47,14 +47,14 @@ class AuctionRecommender(PlainRecommender):
             winner_score = -1
             for bid in slot:
                 idx, _, val = bid
-                if np.ma.is_masked(scores[idx]):
+                if np.ma.is_masked(ratings[idx]):
                     continue
                 if rank_map[idx] < self.promotion_slots[slot_idx]:
                     continue
-                boosted_score = self._boost(scores[idx], val)
-                if boosted_score > winner_score:
+                boosted_rating = self._boost(ratings[idx], val)
+                if boosted_rating > winner_score:
                     winner = idx
-                    winner_score = boosted_score
+                    winner_score = boosted_rating
             if winner != -1:
                 auction_winners.add(winner)
                 res[self.promotion_slots[slot_idx]] = (winner, winner_score)
@@ -64,6 +64,6 @@ class AuctionRecommender(PlainRecommender):
                 continue
             while plain_order[j] in auction_winners:
                 j += 1
-            res[i] = (plain_order[j], plain_scores[j])
+            res[i] = (plain_order[j], plain_ratings[j])
             j += 1
         return res

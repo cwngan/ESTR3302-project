@@ -1,8 +1,10 @@
 from typing import override
+
 import numpy as np
-from tqdm import tqdm
-from predictors import Predictor
 from scipy.sparse import csr_matrix
+from tqdm import tqdm
+
+from predictors import Predictor
 
 
 class LatentFactorPredictor(Predictor):
@@ -127,6 +129,9 @@ class LatentFactorPredictor(Predictor):
         print("Finished training.")
 
     def old_train(self, training_data: csr_matrix, iterations: int = 20):
+        """
+        Previous unoptimized training.
+        """
         if self.shape != training_data.shape:
             raise ValueError(
                 f"Training data shape {training_data.shape} does not match predictor shape {self.shape}."

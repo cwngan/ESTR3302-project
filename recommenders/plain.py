@@ -7,7 +7,7 @@ from recommenders import Recommender
 
 class PlainRecommender(Recommender):
     """
-    Recommend items based on boosted score of items.
+    Recommend items based on plain rating of items.
     """
 
     def __init__(
@@ -20,16 +20,16 @@ class PlainRecommender(Recommender):
         self.users = users
         self.items = items
 
-    def _predict_base_scores(self, user):
-        scores = self.predictor.predict(
+    def _predict_base_ratings(self, user):
+        ratings = self.predictor.predict(
             entries=[(user, i) for i in range(self.items)], quiet=True
         )
-        scores = np.ma.masked_less(scores, 3)
-        return scores
+        ratings = np.ma.masked_less(ratings, 3)
+        return ratings
 
     @override
     def recommend_items(self, user, count):
-        scores = self._predict_base_scores(user)
-        res_order = np.ma.argsort(scores, fill_value=-1)[::-1][:count]
-        res_score = np.ma.sort(scores, fill_value=-1)[::-1][:count]
-        return zip(res_order, res_score)
+        ratings = self._predict_base_ratings(user)
+        res_order = np.ma.argsort(ratings, fill_value=-1)[::-1][:count]
+        res_rating = np.ma.sort(ratings, fill_value=-1)[::-1][:count]
+        return zip(res_order, res_rating)

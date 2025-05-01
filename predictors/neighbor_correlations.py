@@ -43,7 +43,7 @@ class NeighborCorrelationsPredictor(Predictor):
         self.shape = shape
         self.correlation = correlation
 
-    def _find_cosine_coefficients(self, data: np.ma):
+    def _find_cosine_coefficients(self, data: np.ma.masked_array):
         """
         Vectorized cosine–similarity (zeroing any position masked in either column).
 
@@ -53,26 +53,22 @@ class NeighborCorrelationsPredictor(Predictor):
         if self.correlation == Correlation.USER:
             data = data.T
 
-        # data may be a MaskedArray; extract mask and fill masked slots with 0
-        mask = np.ma.getmask(data)  # True where missing
         X = data.filled(0.0)  # numeric array, zeros at masked
 
+        # Numerator matrix: for each (i,j), sum_k X[k,i]*X[k,j] * (zeros handle masking)
+        D_num = X.T @ X  # shape (m,m)
+
+        # Extract mask and fill masked slots with 0
+        mask = np.ma.getmask(data)  # True where missing
         # M[k,i] = 1.0 if data[k,i] is present, else 0.0
         M = (~mask).astype(np.float64)
 
-        # 1) Numerator matrix: for each (i,j), sum_k X[k,i]*X[k,j] * (zeros handle masking)
-        D_num = X.T @ X  # shape (m,m)
-
-        # 2) We need for each (i,j) the norms of column i & j after zeroing any position masked in the other:
-        #    S_i_j = sum_k X[k,i]^2 * M[k,j]
-        #    S_j_i = sum_k X[k,j]^2 * M[k,i]
         sq = X * X
-        S_i_j = sq.T @ M  # shape (m,m)
-        # S_j_i = (M.T @ sq)  which is just S_i_j.T
+        S_ij = sq.T @ M  # shape (m,m)
 
-        # 3) denominator matrix and final cosine
-        denom = np.sqrt(S_i_j * S_i_j.T)  # elementwise sqrt
-        # avoid divide-by-zero
+        # Denominator matrix and final cosine
+        denom = np.sqrt(S_ij * S_ij.T)  # elementwise sqrt
+        # Avoid divide-by-zero
         denom[denom == 0] = 1.0
         D = D_num / denom
 

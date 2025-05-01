@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from typing import override
 
 import numpy as np
@@ -7,9 +6,9 @@ from predictors import Predictor
 from recommenders.plain import PlainRecommender
 
 
-class ScoreBoostRecommender(PlainRecommender):
+class RatingBoostRecommender(PlainRecommender):
     """
-    Recommend items based on boosted score of items.
+    Recommend items based on boosted rating of items.
     """
 
     def __init__(
@@ -33,29 +32,29 @@ class ScoreBoostRecommender(PlainRecommender):
 
     @override
     def recommend_items(self, user, count):
-        scores = super()._predict_base_scores(user)
-        bid_scores = []
+        ratings = super()._predict_base_ratings(user)
+        bid_ratings = []
         for bid in self.payments:
             idx, val = bid
-            if np.ma.is_masked(scores[idx]):
+            if np.ma.is_masked(ratings[idx]):
                 continue
             # Make score negative for max-heap implementation
-            heapq.heappush(bid_scores, (-self._boost(scores[idx], val), idx))
+            heapq.heappush(bid_ratings, (-self._boost(ratings[idx], val), idx))
         res = [None] * count
         i = 0
         slot_set = set(self.promotion_slots)
-        scores_order = np.ma.argsort(scores, fill_value=-1)[::-1]
+        ratings_order = np.ma.argsort(ratings, fill_value=-1)[::-1]
         chosen_items = set()
         for idx in range(count):
             if idx not in slot_set:
-                while scores_order[i] in chosen_items:
+                while ratings_order[i] in chosen_items:
                     i += 1
-                res[idx] = (scores_order[i], scores[scores_order[i]])
-                if bid_scores[0][1] == idx:
-                    heapq.heappop(bid_scores)
+                res[idx] = (ratings_order[i], ratings[ratings_order[i]])
+                if bid_ratings[0][1] == idx:
+                    heapq.heappop(bid_ratings)
                 i += 1
             else:
-                res[idx] = (bid_scores[0][1], -bid_scores[0][0])
-                heapq.heappop(bid_scores)
+                res[idx] = (bid_ratings[0][1], -bid_ratings[0][0])
+                heapq.heappop(bid_ratings)
             chosen_items.add(res[idx][0])
         return res
