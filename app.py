@@ -6,7 +6,7 @@ from predictors.latent_factor import LatentFactorPredictor
 from recommenders import Recommender
 from recommenders.auction import AuctionRecommender
 from recommenders.plain import PlainRecommender
-from recommenders.score_boost import ScoreBoostRecommender
+from recommenders.rating_boost import RatingBoostRecommender
 
 app = Flask(__name__)
 
@@ -31,7 +31,7 @@ plain_recommender = PlainRecommender(
 )
 
 payments = [(idx, random.random()) for idx in random.sample(range(latent_items), k=50)]
-score_boost_recommender = ScoreBoostRecommender(
+rating_boost_recommender = RatingBoostRecommender(
     predictor=latent,
     users=latent_users,
     items=latent_items,
@@ -60,7 +60,7 @@ auction_recommender = AuctionRecommender(
 # "plain" uses the PlainRecommender wrapper.
 models: dict[str, Recommender] = {
     "plain": plain_recommender,
-    "score_boost": score_boost_recommender,
+    "rating_boost": rating_boost_recommender,
     "auction": auction_recommender,
 }
 
@@ -81,7 +81,7 @@ def index():
           <label for="model">Choose model:</label>
           <select name="model" id="model">
             <option value="plain">Plain Recommender</option>
-            <option value="score_boost">Score Boost Recommender</option>
+            <option value="rating_boost">Rating Boost Recommender</option>
             <option value="auction">Auction Based Recommender</option>
           </select>
           <br><br>
@@ -113,7 +113,7 @@ def predict():
     recommended_items = recommender.recommend_items(user_id_int, 20)
 
     # Map recommended item ids to titles.
-    recommended_titles_and_scores = [
+    recommended_titles_and_ratings = [
         (movie_id_mapping.get(item[0], f"Movie ID {item[0]}"), item[1])
         for item in recommended_items
     ]
@@ -133,9 +133,9 @@ def predict():
         <ul>
           {% for idx, item in items %}
             {% if idx % 4 == 0 and model_choice != 'plain' %}
-                <li style="text-decoration: underline;">{{ item[0] }}, score: {{ item[1] }}</li>
+                <li style="text-decoration: underline;">{{ item[0] }}, rating: {{ item[1] }}</li>
             {% else %}
-                <li>{{ item[0] }}, score: {{ item[1] }}</li>
+                <li>{{ item[0] }}, rating: {{ item[1] }}</li>
             {% endif %}
           {% endfor %}
         </ul>
@@ -147,7 +147,7 @@ def predict():
           <label for="model">Choose model:</label>
           <select name="model" id="model">
             <option value="plain">Plain Recommender</option>
-            <option value="score_boost">Score Boost Recommender</option>
+            <option value="rating_boost">Rating Boost Recommender</option>
             <option value="auction">Auction Based Recommender</option>
           </select>
           <br><br>
@@ -159,7 +159,7 @@ def predict():
         """,
         user_id=user_id_int,
         model_choice=model_choice,
-        items=enumerate(recommended_titles_and_scores),
+        items=enumerate(recommended_titles_and_ratings),
         recommender=recommender,
     )
 
@@ -173,7 +173,7 @@ def random_payments():
     new_payments = [
         (idx, random.random()) for idx in random.sample(range(num_items), k=50)
     ]
-    score_boost_recommender.payments = new_payments
+    rating_boost_recommender.payments = new_payments
     return "Random payments generated", 200
 
 
