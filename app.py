@@ -164,14 +164,30 @@ def predict():
     )
 
 
-@app.route("/random-bids")
-def random_bids():
+@app.route("/random-payments")
+def random_payments():
     """
     Generates random bids for the paid recommender.
     """
     num_items = latent.q.shape[1]
-    new_bids = [(idx, random.random()) for idx in random.sample(range(num_items), k=50)]
-    paid_recommender.bids = new_bids
+    new_payments = [
+        (idx, random.random()) for idx in random.sample(range(num_items), k=50)
+    ]
+    score_boost_recommender.payments = new_payments
+    return "Random payments generated", 200
+
+
+@app.route("/random-bids")
+def random_bids():
+    """
+    Generates random bids for the auction recommender.
+    """
+    num_items = latent.q.shape[1]
+    new_bids = [
+        (idx, random.randint(0, 4), random.random())
+        for idx in random.sample(range(num_items), k=50)
+    ]
+    auction_recommender.bids = new_bids
     return "Random bids generated", 200
 
 
