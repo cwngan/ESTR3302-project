@@ -1,11 +1,13 @@
+from collections import OrderedDict
 from typing import override
 
 import numpy as np
+import heapq
 from predictors import Predictor
-from recommenders import Recommender
+from recommenders.plain import PlainRecommender
 
 
-class ScoreBoostRecommender(Recommender):
+class ScoreBoostRecommender(PlainRecommender):
     """
     Recommend items based on boosted score of items.
     """
@@ -15,15 +17,13 @@ class ScoreBoostRecommender(Recommender):
         predictor: Predictor,
         users: int,
         items: int,
-        bids: list[tuple[int, float]],
-        promotion_slots: list[bool],
+        payments: list[tuple[int, float]],
+        promotion_slots: list[int],
         alpha: float = 0.1,
         beta: float = 50,
     ):
-        self.predictor = predictor
-        self.users = users
-        self.items = items
-        self.bids = bids
+        super().__init__(predictor, users, items)
+        self.payments = payments
         self.alpha = alpha
         self.beta = beta
         self.promotion_slots = promotion_slots
@@ -33,28 +33,29 @@ class ScoreBoostRecommender(Recommender):
 
     @override
     def recommend_items(self, user, count):
-        scores = self.predictor.predict(
-            entries=[(user, i) for i in range(self.items)], quiet=True
-        )
-        mask = np.zeros(shape=scores.shape, dtype=bool)
-        for bid in self.bids:
+        scores = super()._predict_base_scores(user)
+        bid_scores = []
+        for bid in self.payments:
             idx, val = bid
-            scores[idx] = self._boost(scores[idx], val)
-            mask[idx] = True
-        plain_order = np.ma.argsort(
-            np.ma.masked_array(scores, mask=mask), fill_value=-999999
-        )[::-1]
-        promotion_order = np.ma.argsort(
-            np.ma.masked_array(scores, mask=~mask), fill_value=-999999
-        )[::-1]
-        res = np.zeros((count,), dtype=int)
+            if np.ma.is_masked(scores[idx]):
+                continue
+            # Make score negative for max-heap implementation
+            heapq.heappush(bid_scores, (-self._boost(scores[idx], val), idx))
+        res = [None] * count
         i = 0
-        j = 0
+        slot_set = set(self.promotion_slots)
+        scores_order = np.ma.argsort(scores, fill_value=-1)[::-1]
+        chosen_items = set()
         for idx in range(count):
-            if self.promotion_slots[idx]:
-                res[idx] = promotion_order[j]
-                j += 1
-            else:
-                res[idx] = plain_order[i]
+            if idx not in slot_set:
+                while scores_order[i] in chosen_items:
+                    i += 1
+                res[idx] = (scores_order[i], scores[scores_order[i]])
+                if bid_scores[0][1] == idx:
+                    heapq.heappop(bid_scores)
                 i += 1
+            else:
+                res[idx] = (bid_scores[0][1], -bid_scores[0][0])
+                heapq.heappop(bid_scores)
+            chosen_items.add(res[idx][0])
         return res
