@@ -19,6 +19,13 @@ class LeastSquaresPredictor(Predictor):
     average_rating: float
 
     def __init__(self, lmda: float, shape: tuple[int]):
+        """
+        Initialize the least squares baseline predictor.
+
+        Args:
+            lmda (float): The regularization parameter.
+            shape (tuple[int]): The shape of the training data.
+        """
         self.lmda = lmda
         self.shape = shape
 

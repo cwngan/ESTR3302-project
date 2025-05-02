@@ -27,13 +27,14 @@ class LatentFactorPredictor(Predictor):
         lmda: float = 0,
     ):
         """
-        Initialize the latent factor predictor with given training data.
+        Initialize the latent factor predictor.
 
         Args:
-            training_data (csr_matrix): The training data as a sparse matrix.
             k (int): The number of latent factors.
+            shape (tuple[int]): The shape of the training data.
             p (np.ndarray, optional): The user latent factors.
             q (np.ndarray, optional): The item latent factors.
+            lmda (float, optional): The regularization parameter.
         """
         self.k = k
         self.shape = shape

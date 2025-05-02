@@ -34,6 +34,15 @@ class NeighborCorrelationsPredictor(Predictor):
         lmda: float = None,
         baseline: LeastSquaresPredictor = None,
     ):
+        """
+        Initialize the neighbor correlations improved predictor.
+
+        Args:
+            correlation (Correlation): The type of correlation to use (item or user).
+            shape (tuple[int], optional): The shape of the training data.
+            lmda (float, optional): The regularization parameter.
+            baseline (LeastSquaresPredictor, optional): The baseline predictor.
+        """
         if baseline is None:
             self.lmda = lmda
             self.baseline = LeastSquaresPredictor(lmda, shape)
