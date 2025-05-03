@@ -13,7 +13,7 @@ class Recommender(ABC):
     items: int
 
     @abstractmethod
-    def recommend_items(self, user: int, count: int) -> list[int]:
+    def recommend_items(self, user: int, count: int) -> list[tuple[int, float, float]]:
         """
         Recommend items for a given user.
         """

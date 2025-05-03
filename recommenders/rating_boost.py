@@ -49,12 +49,20 @@ class RatingBoostRecommender(PlainRecommender):
             if idx not in slot_set:
                 while ratings_order[i] in chosen_items:
                     i += 1
-                res[idx] = (ratings_order[i], ratings[ratings_order[i]])
+                res[idx] = (
+                    ratings_order[i],
+                    ratings[ratings_order[i]],
+                    ratings[ratings_order[i]],
+                )
                 if bid_ratings[0][1] == idx:
                     heapq.heappop(bid_ratings)
                 i += 1
             else:
-                res[idx] = (bid_ratings[0][1], -bid_ratings[0][0])
+                res[idx] = (
+                    bid_ratings[0][1],
+                    -bid_ratings[0][0],
+                    ratings[bid_ratings[0][1]],
+                )
                 heapq.heappop(bid_ratings)
             chosen_items.add(res[idx][0])
         return res

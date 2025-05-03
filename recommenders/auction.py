@@ -57,13 +57,17 @@ class AuctionRecommender(PlainRecommender):
                     winner_score = boosted_rating
             if winner != -1:
                 auction_winners.add(winner)
-                res[self.promotion_slots[slot_idx]] = (winner, winner_score)
+                res[self.promotion_slots[slot_idx]] = (
+                    winner,
+                    winner_score,
+                    ratings[winner],
+                )
         j = 0
         for i in range(count):
             if res[i] is not None:
                 continue
             while plain_order[j] in auction_winners:
                 j += 1
-            res[i] = (plain_order[j], plain_ratings[j])
+            res[i] = (plain_order[j], plain_ratings[j], plain_ratings[j])
             j += 1
         return res

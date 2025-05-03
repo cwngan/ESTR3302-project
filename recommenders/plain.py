@@ -32,4 +32,4 @@ class PlainRecommender(Recommender):
         ratings = self._predict_base_ratings(user)
         res_order = np.ma.argsort(ratings, fill_value=-1)[::-1][:count]
         res_rating = np.ma.sort(ratings, fill_value=-1)[::-1][:count]
-        return zip(res_order, res_rating)
+        return list(zip(res_order, res_rating, res_rating))
