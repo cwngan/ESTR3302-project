@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, override
+from typing import Callable, override
 import numpy as np
 from tqdm import tqdm
 from predictors import Predictor
@@ -21,18 +21,18 @@ class NeighborCorrelationsPredictor(Predictor):
 
     lmda: float
     baseline: Predictor
-    error: np.ndarray = None
-    cosine_coefficients: np.ndarray = None
+    error: np.ndarray | None = None
+    cosine_coefficients: np.ndarray | None = None
     correlation: Correlation
-    neighbor_table: np.ndarray = None
-    _training_data: csr_matrix = None
+    neighbor_table: np.ndarray | None = None
+    _training_data: csr_matrix | None = None
 
     def __init__(
         self,
         correlation: Correlation,
-        shape: tuple[int] = None,
-        lmda: float = None,
-        baseline: LeastSquaresPredictor = None,
+        shape: tuple[int, int] | None = None,
+        lmda: float | None = None,
+        baseline: LeastSquaresPredictor | None = None,
     ):
         """
         Initialize the neighbor correlations improved predictor.
@@ -44,15 +44,20 @@ class NeighborCorrelationsPredictor(Predictor):
             baseline (LeastSquaresPredictor, optional): The baseline predictor.
         """
         if baseline is None:
+            if lmda is None or shape is None:
+                raise ValueError(
+                    "Either lmda or shape must be provided if baseline is None"
+                )
             self.lmda = lmda
             self.baseline = LeastSquaresPredictor(lmda, shape)
+            self.shape = shape
         else:
             self.lmda = baseline.lmda
             self.baseline = baseline
-        self.shape = shape
+            self.shape = baseline.shape
         self.correlation = correlation
 
-    def _find_cosine_coefficients(self, data: np.ma.masked_array):
+    def _find_cosine_coefficients(self, data: csr_matrix, mask: csr_matrix):
         """
         Vectorized cosine–similarity (zeroing any position masked in either column).
 
@@ -125,6 +130,7 @@ class NeighborCorrelationsPredictor(Predictor):
             self.neighbor_table is None
             or self.error is None
             or self.cosine_coefficients is None
+            or self._training_data is None
         ):
             raise RuntimeError("Predictor has not been trained yet")
         print("Predicting entries...")
@@ -138,7 +144,7 @@ class NeighborCorrelationsPredictor(Predictor):
             u, i = entry
             if self.correlation == Correlation.USER:
                 u, i = i, u
-            if not isinstance(self.neighbor_table[u][i], (int, np.int64)):
+            if isinstance(self.neighbor_table[u][i], (list, np.ndarray)):
                 d_sum = sum(
                     abs(self.cosine_coefficients[i][j])
                     for j in self.neighbor_table[u][i]
@@ -146,7 +152,7 @@ class NeighborCorrelationsPredictor(Predictor):
                 if d_sum == 0:
                     continue
                 for j in self.neighbor_table[u][i]:
-                    result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
+                    result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u, j]
             else:
                 j = self.neighbor_table[u][i]
                 if np.ma.is_masked(training_data[u][j]):
@@ -154,7 +160,7 @@ class NeighborCorrelationsPredictor(Predictor):
                 d_sum = abs(self.cosine_coefficients[i][j])
                 if d_sum == 0:
                     continue
-                result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
+                result[idx] += self.cosine_coefficients[i][j] / d_sum * error[u, j]
         print("Finished predicting entries.")
         return np.clip(result, min=0.5, max=5)
 
@@ -164,6 +170,7 @@ class NeighborCorrelationsPredictor(Predictor):
             self.neighbor_table is None
             or self.error is None
             or self.cosine_coefficients is None
+            or self._training_data is None
         ):
             raise RuntimeError("Predictor has not been trained yet")
         print("Predicting all...")
@@ -190,7 +197,7 @@ class NeighborCorrelationsPredictor(Predictor):
                         continue
                     for j in self.neighbor_table[u][i]:
                         result[u][i] += (
-                            self.cosine_coefficients[i][j] / d_sum * error[u][j]
+                            self.cosine_coefficients[i][j] / d_sum * error[u, j]
                         )
                 else:
                     j = self.neighbor_table[u][i]
@@ -199,7 +206,7 @@ class NeighborCorrelationsPredictor(Predictor):
                     d_sum = abs(self.cosine_coefficients[i][j])
                     if d_sum == 0:
                         continue
-                    result[u][i] += self.cosine_coefficients[i][j] / d_sum * error[u][j]
+                    result[u][i] += self.cosine_coefficients[i][j] / d_sum * error[u, j]
         predictions = np.clip(result, min=0.5, max=5)
         if self.correlation == Correlation.USER:
             predictions = predictions.T

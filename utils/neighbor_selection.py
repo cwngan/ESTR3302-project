@@ -1,12 +1,13 @@
 import numpy as np
 from tqdm import tqdm
+from scipy.sparse import csr_matrix
 
 
 def most_similar(
     training_data: np.ndarray,
     cosine_coefficients: np.ndarray,
     one: bool = False,
-    entry: tuple[int] = None,
+    entry: tuple[int, int] | None = None,
 ):
     """
     Return a list representing the most similar entry of each entry
@@ -15,6 +16,8 @@ def most_similar(
     n, m = training_data.shape
     D_neighbors = np.argsort(np.abs(cosine_coefficients), axis=1)
     if one:
+        if entry is None:
+            raise ValueError("entry must be provided when one is True")
         u, i = entry
         d = D_neighbors[i]
         k = m - 1
@@ -37,7 +40,7 @@ def two_most_similar(
     training_data: np.ndarray,
     cosine_coefficients: np.ndarray,
     one: bool = False,
-    entry: tuple[int] = None,
+    entry: tuple[int, int] | None = None,
 ):
     """
     Return a list representing the two most similar entry of each entry
@@ -46,6 +49,8 @@ def two_most_similar(
     n, m = training_data.shape
     D_neighbors = np.argsort(np.abs(cosine_coefficients), axis=1)
     if one:
+        if entry is None:
+            raise ValueError("entry must be provided when one is True")
         u, i = entry
         res = []
         d = D_neighbors[i]
@@ -55,7 +60,7 @@ def two_most_similar(
                 res.append(d[k])
             k -= 1
         return res
-    L = [[[] for _ in range(m)] for __ in range(n)]
+    L: list[np.ndarray | None] = [None for _ in range(n)]
     for u in tqdm(range(n)):
         masked_d = np.ma.masked_array(
             np.abs(cosine_coefficients),

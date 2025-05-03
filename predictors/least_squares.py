@@ -15,10 +15,10 @@ class LeastSquaresPredictor(Predictor):
     """
 
     lmda: float
-    b: np.ndarray = None
+    b: np.ndarray | None = None
     average_rating: float
 
-    def __init__(self, lmda: float, shape: tuple[int]):
+    def __init__(self, lmda: float, shape: tuple[int, int]):
         """
         Initialize the least squares baseline predictor.
 

@@ -8,10 +8,10 @@ class Predictor(ABC):
     Abstract base class for all predictors.
     """
 
-    shape: tuple[int]
+    shape: tuple[int, int]
 
     @abstractmethod
-    def predict(self, entries: list[tuple[int]], quiet: bool) -> np.ndarray:
+    def predict(self, entries: list[tuple[int, int]], quiet: bool) -> np.ndarray:
         """
         Predict the rating for given users and items.
         """
