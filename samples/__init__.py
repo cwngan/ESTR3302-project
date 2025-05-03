@@ -1,44 +1,54 @@
 import numpy as np
+from scipy.sparse import csr_matrix
 
 
 def generate_sample_data(users: int, items: int, factors: int):
     """
     Generate sample data for a user-item rating matrix.
 
-    Optimized by o3-mini.
+    The function generates a matrix in which only 2% of the entries are filled with ratings,
+    and the resulting rating matrix is returned as a sparse csr_matrix.
+    This optimized version computes ratings only for sampled indices to avoid creating huge dense matrices.
 
     Args:
         users (int): Number of users.
         items (int): Number of items.
         factors (int): Number of factors.
     """
-    # 1) user_pref: U×F, item_perf: I×F
-    user_pref = np.random.rand(users, factors) * 10.0 - 5
-    user_sd = np.random.rand(users)  # U
-    item_perf = np.random.rand(items, factors) * 10.0 - 5
-
-    # 2) draw noise per (user, item, factor) in one shot
-    #    shape: (users, items, factors)
-    noise = np.random.normal(
-        loc=user_pref[:, None, :],  # broadcast U×1×F
-        scale=user_sd[:, None, None],  # broadcast U×1×1
-        size=(users, items, factors),
-    )
-
-    # 3) weight by item_perf and sum over factors → (users, items)
-    raw = (noise * item_perf[None, :, :]).sum(axis=2)
+    # Generate latent factors and biases
+    user_pref = np.random.normal(0, 1.5, size=(users, factors))
+    user_sd = np.random.rand(users)
+    item_perf = np.random.normal(0, 1.5, size=(items, factors))
     user_bias = np.random.normal(0, 0.5, size=users)
     item_bias = np.random.normal(0, 1.0, size=items)
-    raw += user_bias[:, None] + item_bias[None, :]
 
-    # 4) min–max scale into [1, 5] and round
-    mn, mx = raw.min(), raw.max()
-    scaled = (raw - mn) / (mx - mn) * 4.0 + 1.0
-    ratings = np.round(scaled).clip(1, 5)
+    # Determine sample indices for 2% non-zero entries
+    total_entries = users * items
+    sample_size = int(total_entries * 0.02)
+    indices = np.random.choice(total_entries, sample_size, replace=False)
+    rows, cols = np.unravel_index(indices, (users, items))
+
+    # Compute raw ratings only for sampled indices
+    noise = np.random.normal(
+        loc=user_pref[rows, :],
+        scale=user_sd[rows][:, None],
+        size=(sample_size, factors),
+    )
+    raw_values = (
+        np.sum(noise * item_perf[cols, :], axis=1) + user_bias[rows] + item_bias[cols]
+    )
+
+    # Min–max scale into [1, 5] and round.
+    mn, mx = raw_values.min(), raw_values.max()
+    scaled = (raw_values - mn) / (mx - mn) * 4.0 + 0.5
+    ratings_sampled = (np.round(scaled * 2) / 2).clip(0.5, 5)
+
+    # Create sparse matrix from sampled ratings.
+    ratings = csr_matrix((ratings_sampled, (rows, cols)), shape=(users, items))
 
     return {
         "user_pref": user_pref.tolist(),
         "user_sd": user_sd.tolist(),
         "item_perf": item_perf.tolist(),
-        "ratings": ratings.astype(np.int64).tolist(),
+        "ratings": ratings,
     }
