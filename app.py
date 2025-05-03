@@ -23,6 +23,8 @@ except Exception as e:
 with open("models/latent_5", "rb") as f:
     latent: LatentFactorPredictor = pickle.load(f)
 
+fixed_random = random.Random(0xC0FFEE)
+
 # Create a plain recommender using the latent predictor.
 latent_users = latent.p.shape[1]
 latent_items = latent.q.shape[1]
@@ -30,21 +32,25 @@ plain_recommender = PlainRecommender(
     predictor=latent, users=latent_users, items=latent_items
 )
 
-payments = [(idx, random.random()) for idx in random.sample(range(latent_items), k=50)]
+payments = [
+    (idx, fixed_random.random())
+    for idx in fixed_random.sample(range(latent_items), k=50)
+]
 rating_boost_recommender = RatingBoostRecommender(
     predictor=latent,
     users=latent_users,
     items=latent_items,
     payments=payments,
-    alpha=0.1,
-    beta=50,
+    alpha=0.2,
+    beta=25,
     promotion_slots=[x for x in range(0, 20, 4)],
 )
 
 bids = [
-    (idx, random.randint(0, 4), random.random())
-    for idx in random.sample(range(latent_items), k=50)
+    (idx, fixed_random.randint(0, 4), fixed_random.random())
+    for idx in fixed_random.sample(range(latent_items), k=50)
 ]
+bids.sort(key=lambda x: x[1])
 auction_recommender = AuctionRecommender(
     predictor=latent,
     users=latent_users,
@@ -114,7 +120,12 @@ def predict():
 
     # Map recommended item ids to titles.
     recommended_titles_and_ratings = [
-        (movie_id_mapping.get(item[0], f"Movie ID {item[0]}"), item[1])
+        (
+            item[0],
+            movie_id_mapping.get(item[0], f"Movie ID {item[0]}"),
+            item[1],
+            item[2],
+        )
         for item in recommended_items
     ]
 
@@ -122,20 +133,28 @@ def predict():
         """
         <h1>Recommendations for User {{ user_id }}</h1>
         <p>Model used: {{ model_choice }}</p>
-        {# {% if model_choice != 'plain' %}
-          Bids:
-          <ul>
-            {% for bid in recommender.bids %}
-              <li>Item {{ bid[0] }}: {{ bid[1] }}</li>
+        {% if model_choice == 'rating_boost' %}
+          Payments:
+          <ul style="height: 30rem; overflow: auto">
+            {% for payment in recommender.payments %}
+              <li>Item {{ payment[0] }}: {{ payment[1] }}</li>
             {% endfor %}
           </ul>
-        {% endif %} #}
+        {% endif %}
+        {% if model_choice == 'auction' %}
+          Bids:
+          <ul style="height: 30rem; overflow: auto">
+            {% for bid in recommender.bids %}
+              <li>Item {{ bid[0] }}, slot {{ bid[1] }}, bid {{ bid[2] }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
         <ul>
           {% for idx, item in items %}
             {% if idx % 4 == 0 and model_choice != 'plain' %}
-                <li style="text-decoration: underline;">{{ item[0] }}, rating: {{ item[1] }}</li>
+                <li style="text-decoration: underline;">ID: {{ item[0] }}, {{ item[1] }}, rating: {{ item[2] }}, previous: {{ item[3] }}</li>
             {% else %}
-                <li>{{ item[0] }}, rating: {{ item[1] }}</li>
+                <li>ID: {{ item[0] }}, {{ item[1] }}, rating: {{ item[2] }}</li>
             {% endif %}
           {% endfor %}
         </ul>
@@ -171,7 +190,8 @@ def random_payments():
     """
     num_items = latent.q.shape[1]
     new_payments = [
-        (idx, random.random()) for idx in random.sample(range(num_items), k=50)
+        (idx, fixed_random.random())
+        for idx in fixed_random.sample(range(num_items), k=50)
     ]
     rating_boost_recommender.payments = new_payments
     return "Random payments generated", 200
@@ -184,8 +204,8 @@ def random_bids():
     """
     num_items = latent.q.shape[1]
     new_bids = [
-        (idx, random.randint(0, 4), random.random())
-        for idx in random.sample(range(num_items), k=50)
+        (idx, fixed_random.randint(0, 4), fixed_random.random())
+        for idx in fixed_random.sample(range(num_items), k=50)
     ]
     auction_recommender.bids = new_bids
     return "Random bids generated", 200
