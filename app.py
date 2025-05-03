@@ -108,11 +108,10 @@ def predict():
 
     if model_choice not in models:
         return "Invalid model choice", 400
+    if user_id is None:
+        return "Invalid uesr id", 400
 
-    try:
-        user_id_int = int(user_id)
-    except ValueError:
-        return "Invalid user id", 400
+    user_id_int = int(user_id)
 
     recommender = models[model_choice]
     # Get recommendations. Assumes that the recommender has a method recommend_items(user, n)
