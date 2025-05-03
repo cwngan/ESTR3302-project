@@ -62,18 +62,28 @@ class NeighborCorrelationsPredictor(Predictor):
         if self.correlation == Correlation.USER:
             data = data.T
 
-        X = data.filled(0.0)  # numeric array, zeros at masked
+        X = data
 
+        print("Calculating numerators...")
         # Numerator matrix: for each (i,j), sum_k X[k,i]*X[k,j] * (zeros handle masking)
-        D_num = X.T @ X  # shape (m,m)
+        D_num: csr_matrix = X.T @ X  # shape (m,m)
+        D_num = D_num.toarray()
 
-        # Extract mask and fill masked slots with 0
-        mask = np.ma.getmask(data)  # True where missing
-        # M[k,i] = 1.0 if data[k,i] is present, else 0.0
-        M = (~mask).astype(np.float64)
+        # # Extract mask and fill masked slots with 0
+        # mask = np.ma.getmask(data)  # True where missing
+        # # M[k,i] = 1.0 if data[k,i] is present, else 0.0
+        # M = (~mask).astype(np.float64)
+        # print("Building mask matrix...")
+        # Build a binary indicator sparse matrix where nonzero entries are 1
+        # M = data.copy()
+        # M.data = np.ones_like(M.data)
 
-        sq = X * X
-        S_ij = sq.T @ M  # shape (m,m)
+        # print(M.toarray())
+
+        print("Calculating denominators...")
+        sq: csr_matrix = X.multiply(X)
+        S_ij: csr_matrix = sq.T.dot(mask)  # shape (m,m)
+        S_ij = S_ij.toarray()
 
         # Denominator matrix and final cosine
         denom = np.sqrt(S_ij * S_ij.T)  # elementwise sqrt
@@ -197,13 +207,23 @@ class NeighborCorrelationsPredictor(Predictor):
         return predictions
 
     @override
-    def train(self, training_data: csr_matrix, get_neighbors: Any = most_similar):
+    def train(
+        self,
+        training_data: csr_matrix,
+        get_neighbors: Callable = most_similar,
+        baseline_predictions: csr_matrix | None = None,
+    ):
         print("Calculating cosine similarity coefficients...")
-        self._training_data = np.ma.masked_equal(training_data.toarray(), 0)
-        self.error = np.ma.masked_equal(
-            self._training_data, 0
-        ) - self.baseline.predict_all(quiet=True)
-        self.cosine_coefficients = self._find_cosine_coefficients(self.error)
+        if baseline_predictions is not None:
+            self.error = training_data - baseline_predictions
+        else:
+            raise NotImplementedError(
+                "Not yet implemented auto calling baseline prediction"
+            )
+        self._training_data = training_data.copy()
+        mask = training_data.copy()
+        mask.data = np.ones_like(mask.data)
+        self.cosine_coefficients = self._find_cosine_coefficients(self.error, mask)
         print("Making neighbor table...")
         self.neighbor_table = get_neighbors(
             training_data=(
